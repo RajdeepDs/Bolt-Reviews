@@ -2,6 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import DashboardKpiBar from "../components/dashboard-kpi-bar";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -14,9 +15,7 @@ export default function Index() {
 
   return (
     <s-page heading="Dashboard" inlineSize="base">
-      <s-section>
-        <s-text>Hello World</s-text>
-      </s-section>
+      <DashboardKpiBar />
     </s-page>
   );
 }
