@@ -3,6 +3,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import DashboardKpiBar from "../components/dashboard-kpi-bar";
+import TopProductsTable from "app/components/dashboard-top-products-table";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -74,6 +75,7 @@ export default function Index() {
       </s-section>
       <s-section>
         <s-heading>Top products</s-heading>
+        <TopProductsTable />
       </s-section>
     </s-page>
   );
