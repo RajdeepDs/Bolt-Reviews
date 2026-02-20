@@ -139,6 +139,17 @@ export default function ReviewsIndex() {
 
   return (
     <s-page heading="My Reviews" inlineSize="base">
+      <s-button slot="secondary-actions" commandfor="more-actions-id">
+        More actions
+      </s-button>
+      <s-menu id="more-actions-id">
+        <s-button onClick={() => shopify.toast.show("Imported...")}>
+          Import reviews
+        </s-button>
+        <s-button onClick={() => shopify.toast.show("Exported...")}>
+          Export reviews
+        </s-button>
+      </s-menu>
       {selectedReviews.length > 0 && (
         <>
           {selectedPendingCount > 0 && (
@@ -146,6 +157,7 @@ export default function ReviewsIndex() {
               Publish ({selectedPendingCount})
             </s-button>
           )}
+
           <s-button
             slot="secondary-actions"
             tone="critical"
