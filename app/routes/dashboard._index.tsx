@@ -12,8 +12,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export default function Index() {
-  const shopify = useAppBridge();
-
   return (
     <s-page heading="Dashboard" inlineSize="base">
       <DashboardKpiBar />

@@ -1,7 +1,7 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -65,7 +65,7 @@ export default function ProductsIndex() {
                   {product.totalReviews > 0 ? (
                     <s-text>{product.averageRating.toFixed(1)} ★</s-text>
                   ) : (
-                    <s-text tone="subdued">—</s-text>
+                    <s-text>—</s-text>
                   )}
                 </s-table-cell>
 
@@ -75,9 +75,9 @@ export default function ProductsIndex() {
                 {/* Pending Reviews */}
                 <s-table-cell>
                   {product.pendingReviews > 0 ? (
-                    <s-badge tone="attention">{product.pendingReviews}</s-badge>
+                    <s-badge>{product.pendingReviews}</s-badge>
                   ) : (
-                    <s-text tone="subdued">0</s-text>
+                    <s-text>0</s-text>
                   )}
                 </s-table-cell>
 
