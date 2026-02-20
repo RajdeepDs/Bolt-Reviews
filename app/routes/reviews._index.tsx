@@ -90,11 +90,85 @@ export default function ReviewsIndex() {
     );
   };
 
+  const handlePublishSelected = () => {
+    // Only publish pending reviews
+    const pendingToPublish = selectedReviews.filter((id) => {
+      const review = dummyReviews.find((r) => r.id === id);
+      return review?.status === "pending";
+    });
+
+    if (pendingToPublish.length === 0) {
+      console.log("No pending reviews to publish");
+      // You can show a toast message here
+      return;
+    }
+
+    console.log("Publishing pending reviews:", pendingToPublish);
+    // Add your publish logic here
+    setSelectedReviews([]);
+  };
+
+  const handleUnpublishSelected = () => {
+    // Only unpublish published reviews
+    const publishedToUnpublish = selectedReviews.filter((id) => {
+      const review = dummyReviews.find((r) => r.id === id);
+      return review?.status === "published";
+    });
+
+    if (publishedToUnpublish.length === 0) {
+      console.log("No published reviews to unpublish");
+      return;
+    }
+
+    console.log("Unpublishing reviews:", publishedToUnpublish);
+    // Add your unpublish logic here
+    setSelectedReviews([]);
+  };
+
+  // Count how many selected reviews are pending
+  const selectedPendingCount = selectedReviews.filter((id) => {
+    const review = dummyReviews.find((r) => r.id === id);
+    return review?.status === "pending";
+  }).length;
+
+  // Count how many selected reviews are published
+  const selectedPublishedCount = selectedReviews.filter((id) => {
+    const review = dummyReviews.find((r) => r.id === id);
+    return review?.status === "published";
+  }).length;
+
   return (
     <s-page heading="My Reviews" inlineSize="base">
+      {selectedReviews.length > 0 && (
+        <>
+          {selectedPendingCount > 0 && (
+            <s-button slot="primary-action" onClick={handlePublishSelected}>
+              Publish ({selectedPendingCount})
+            </s-button>
+          )}
+          <s-button
+            slot="secondary-actions"
+            tone="critical"
+            onClick={() => setSelectedReviews([])}
+          >
+            Delete
+          </s-button>
+          {selectedPublishedCount > 0 && (
+            <s-button
+              slot={
+                selectedPendingCount > 0
+                  ? "secondary-actions"
+                  : "primary-action"
+              }
+              onClick={handleUnpublishSelected}
+            >
+              Unpublish ({selectedPublishedCount})
+            </s-button>
+          )}
+        </>
+      )}
       <s-section padding="none">
         {/* FILTER BUTTONS */}
-
         <s-table>
           <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
             <s-stack direction="inline">
@@ -123,7 +197,7 @@ export default function ReviewsIndex() {
               icon="search"
               placeholder="Searching all reviews"
               value={searchQuery}
-              onInput={(e) => setSearchQuery(e.target.value)}
+              onInput={(e) => setSearchQuery(e.target?.value)}
             />
           </s-grid>
           {/* TABLE HEADER */}
