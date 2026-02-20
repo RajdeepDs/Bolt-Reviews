@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -33,100 +34,163 @@ const dummyReviews = [
     status: "pending",
   },
 ];
-function renderStars(rating: number) {
-  return "★".repeat(rating) + "☆".repeat(5 - rating);
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
 export default function ReviewsIndex() {
-  return (
-    <s-page heading="Reviews" inlineSize="base">
-      <s-section padding="none">
-        <s-table>
-          {/* FILTER BAR */}
-          <s-grid
-            slot="filters"
-            gap="base"
-            gridTemplateColumns="auto 1fr"
-            alignItems="center"
-          >
-            <s-stack direction="inline" gap="small-200">
-              <s-button variant="secondary">All</s-button>
-              <s-button variant="tertiary">Pending</s-button>
-              <s-button variant="tertiary">Low ratings</s-button>
-              <s-button variant="tertiary">With images</s-button>
-            </s-stack>
+  const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
+  const [filter, setFilter] = useState<"all" | "low" | "pending">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
+  const filteredReviews = dummyReviews.filter((review) => {
+    // Apply filter
+    let matchesFilter = true;
+    if (filter === "low") matchesFilter = review.rating <= 2;
+    if (filter === "pending") matchesFilter = review.status === "pending";
+
+    // Apply search
+    const matchesSearch =
+      searchQuery === "" ||
+      review.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      review.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      review.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      review.product.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesFilter && matchesSearch;
+  });
+
+  const toggleSelectAll = () => {
+    if (selectedReviews.length === filteredReviews.length) {
+      setSelectedReviews([]);
+    } else {
+      setSelectedReviews(filteredReviews.map((r) => r.id));
+    }
+  };
+
+  const toggleReview = (id: string) => {
+    setSelectedReviews((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
+    );
+  };
+
+  return (
+    <s-page heading="My Reviews" inlineSize="base">
+      <s-section padding="none">
+        {/* FILTER BUTTONS */}
+
+        <s-table>
+          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
+            <s-stack direction="inline">
+              <s-button
+                variant={filter === "all" ? "secondary" : "tertiary"}
+                onClick={() => setFilter("all")}
+              >
+                All
+              </s-button>
+              <s-button
+                variant={filter === "low" ? "secondary" : "tertiary"}
+                onClick={() => setFilter("low")}
+              >
+                Low ratings
+              </s-button>
+              <s-button
+                variant={filter === "pending" ? "secondary" : "tertiary"}
+                onClick={() => setFilter("pending")}
+              >
+                Pending
+              </s-button>
+            </s-stack>
             <s-text-field
               label="Search reviews"
               labelAccessibilityVisibility="exclusive"
               icon="search"
-              placeholder="Search reviews"
+              placeholder="Searching all reviews"
+              value={searchQuery}
+              onInput={(e) => setSearchQuery(e.target.value)}
             />
           </s-grid>
-
           {/* TABLE HEADER */}
           <s-table-header-row>
-            <s-table-header listSlot="primary">Review</s-table-header>
-            <s-table-header>Rating</s-table-header>
+            <s-table-header>
+              <s-checkbox
+                checked={
+                  selectedReviews.length === filteredReviews.length &&
+                  filteredReviews.length > 0
+                }
+                onInput={toggleSelectAll}
+              />
+            </s-table-header>
+            <s-table-header listSlot="primary">Customer</s-table-header>
+            <s-table-header>Title</s-table-header>
+            <s-table-header format="numeric">Rating</s-table-header>
             <s-table-header>Product</s-table-header>
-            <s-table-header>Created</s-table-header>
+            <s-table-header>Date</s-table-header>
             <s-table-header listSlot="secondary">Status</s-table-header>
-            <s-table-header format="numeric">Actions</s-table-header>
           </s-table-header-row>
 
           {/* TABLE BODY */}
           <s-table-body>
-            {dummyReviews.map((review) => (
+            {filteredReviews.map((review) => (
               <s-table-row key={review.id}>
-                {/* REVIEW CELL */}
+                {/* CHECKBOX */}
+                <s-table-cell>
+                  <s-checkbox
+                    checked={selectedReviews.includes(review.id)}
+                    onInput={() => toggleReview(review.id)}
+                  />
+                </s-table-cell>
+
+                {/* CUSTOMER */}
+                <s-table-cell>
+                  <s-text>{review.author}</s-text>
+                </s-table-cell>
+
+                {/* TITLE */}
                 <s-table-cell>
                   <s-stack gap="small">
-                    <s-text fontWeight="semibold">{review.author}</s-text>
                     <s-text>{review.title}</s-text>
-                    <s-text tone="subdued" size="small">
-                      {review.content}
-                    </s-text>
                   </s-stack>
                 </s-table-cell>
 
                 {/* RATING */}
                 <s-table-cell>
-                  <s-text tone={review.rating <= 2 ? "critical" : "default"}>
-                    {renderStars(review.rating)}
-                  </s-text>
+                  <s-text>{review.rating} stars</s-text>
                 </s-table-cell>
 
                 {/* PRODUCT */}
                 <s-table-cell>
-                  <s-text tone="subdued">{review.product}</s-text>
+                  <s-text>{review.product}</s-text>
                 </s-table-cell>
 
                 {/* DATE */}
                 <s-table-cell>
-                  <s-text tone="subdued">{review.date}</s-text>
+                  <s-text>{formatDate(review.date)}</s-text>
                 </s-table-cell>
 
                 {/* STATUS */}
                 <s-table-cell>
                   <s-badge
-                    tone={
-                      review.status === "published" ? "success" : "attention"
-                    }
+                    tone={review.status === "published" ? "success" : "warning"}
                   >
                     {review.status === "published" ? "Published" : "Pending"}
                   </s-badge>
-                </s-table-cell>
-
-                {/* ACTIONS */}
-                <s-table-cell>
-                  <s-stack direction="inline" gap="small">
-                    <s-button size="small" variant="secondary">
-                      Reply
-                    </s-button>
-                    <s-button size="small" variant="secondary" tone="critical">
-                      Delete
-                    </s-button>
-                  </s-stack>
                 </s-table-cell>
               </s-table-row>
             ))}
