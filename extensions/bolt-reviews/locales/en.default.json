@@ -1,0 +1,52 @@
+{
+  "name": "Product Reviews",
+  "blocks": {
+    "reviews_list": {
+      "name": "Reviews List",
+      "settings": {
+        "reviews_per_page": {
+          "label": "Reviews per page",
+          "info": "Number of reviews to display per page"
+        },
+        "show_photos": {
+          "label": "Show review photos",
+          "info": "Display photos uploaded by customers in their reviews"
+        },
+        "show_verified_badge": {
+          "label": "Show verified purchase badge",
+          "info": "Display a badge for verified purchases"
+        },
+        "show_helpful_buttons": {
+          "label": "Show helpful buttons",
+          "info": "Allow customers to mark reviews as helpful"
+        }
+      }
+    },
+    "review_form": {
+      "name": "Write Review Form",
+      "settings": {
+        "require_photo": {
+          "label": "Require photo upload",
+          "info": "Make photo upload mandatory when submitting a review"
+        },
+        "show_email_field": {
+          "label": "Show email field",
+          "info": "Display email field in the review form"
+        }
+      }
+    },
+    "rating_summary": {
+      "name": "Rating Summary",
+      "settings": {
+        "show_distribution": {
+          "label": "Show rating distribution",
+          "info": "Display a breakdown of ratings by star count"
+        },
+        "show_total_count": {
+          "label": "Show total review count",
+          "info": "Display the total number of reviews"
+        }
+      }
+    }
+  }
+}

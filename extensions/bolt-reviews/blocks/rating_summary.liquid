@@ -1,0 +1,438 @@
+{% comment %}
+  Rating Summary Block
+  Displays aggregate rating statistics and distribution
+{% endcomment %}
+
+<div class="rating-summary" data-product-id="{{ product.id }}">
+  <div class="summary-loading">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="summary-content" id="summary-content" style="display: none;">
+    <div class="summary-header">
+      <div class="average-rating">
+        <span class="rating-number" id="average-rating">0.0</span>
+        <div class="stars-display" id="stars-display"></div>
+      </div>
+
+      {% if block.settings.show_total_count %}
+      <div class="total-reviews">
+        <span id="total-reviews-count">0</span> reviews
+      </div>
+      {% endif %}
+    </div>
+
+    {% if block.settings.show_distribution %}
+    <div class="rating-distribution" id="rating-distribution">
+      <div class="distribution-item" data-rating="5">
+        <span class="rating-label">5 stars</span>
+        <div class="distribution-bar">
+          <div class="bar-fill" data-percentage="0"></div>
+        </div>
+        <span class="rating-count">0</span>
+      </div>
+
+      <div class="distribution-item" data-rating="4">
+        <span class="rating-label">4 stars</span>
+        <div class="distribution-bar">
+          <div class="bar-fill" data-percentage="0"></div>
+        </div>
+        <span class="rating-count">0</span>
+      </div>
+
+      <div class="distribution-item" data-rating="3">
+        <span class="rating-label">3 stars</span>
+        <div class="distribution-bar">
+          <div class="bar-fill" data-percentage="0"></div>
+        </div>
+        <span class="rating-count">0</span>
+      </div>
+
+      <div class="distribution-item" data-rating="2">
+        <span class="rating-label">2 stars</span>
+        <div class="distribution-bar">
+          <div class="bar-fill" data-percentage="0"></div>
+        </div>
+        <span class="rating-count">0</span>
+      </div>
+
+      <div class="distribution-item" data-rating="1">
+        <span class="rating-label">1 star</span>
+        <div class="distribution-bar">
+          <div class="bar-fill" data-percentage="0"></div>
+        </div>
+        <span class="rating-count">0</span>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="rating-filters" id="rating-filters">
+      <button class="filter-btn active" data-filter="all">All Reviews</button>
+      <button class="filter-btn" data-filter="5">5 Stars</button>
+      <button class="filter-btn" data-filter="4">4 Stars</button>
+      <button class="filter-btn" data-filter="3">3 Stars</button>
+      <button class="filter-btn" data-filter="2">2 Stars</button>
+      <button class="filter-btn" data-filter="1">1 Star</button>
+    </div>
+  </div>
+
+  <div class="no-ratings" id="no-ratings" style="display: none;">
+    <p>No ratings yet</p>
+  </div>
+</div>
+
+<style>
+  .rating-summary {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+  }
+
+  .summary-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+  }
+
+  .spinner {
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-top: 3px solid #333;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .summary-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .average-rating {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .rating-number {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #222;
+    line-height: 1;
+  }
+
+  .stars-display {
+    display: flex;
+    gap: 4px;
+  }
+
+  .stars-display .star {
+    font-size: 1.5rem;
+    color: #FFB800;
+  }
+
+  .stars-display .star.empty {
+    color: #E0E0E0;
+  }
+
+  .stars-display .star.half {
+    position: relative;
+    color: #E0E0E0;
+  }
+
+  .stars-display .star.half::before {
+    content: '★';
+    position: absolute;
+    left: 0;
+    width: 50%;
+    overflow: hidden;
+    color: #FFB800;
+  }
+
+  .total-reviews {
+    font-size: 1.125rem;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .rating-distribution {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .distribution-item {
+    display: grid;
+    grid-template-columns: 60px 1fr 40px;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .rating-label {
+    font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .distribution-bar {
+    height: 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #FFB800 0%, #FFA000 100%);
+    width: 0%;
+    transition: width 0.5s ease;
+    border-radius: 4px;
+  }
+
+  .rating-count {
+    font-size: 0.875rem;
+    color: #666;
+    text-align: right;
+  }
+
+  .rating-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .filter-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 20px;
+    background: #fff;
+    color: #666;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover {
+    border-color: #333;
+    color: #333;
+  }
+
+  .filter-btn.active {
+    background: #333;
+    color: #fff;
+    border-color: #333;
+  }
+
+  .no-ratings {
+    text-align: center;
+    padding: 2rem;
+    color: #999;
+  }
+
+  @media (max-width: 768px) {
+    .rating-summary {
+      padding: 1rem;
+    }
+
+    .summary-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .rating-number {
+      font-size: 2.5rem;
+    }
+
+    .distribution-item {
+      grid-template-columns: 50px 1fr 30px;
+      gap: 0.5rem;
+    }
+
+    .rating-filters {
+      gap: 0.375rem;
+    }
+
+    .filter-btn {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.8125rem;
+    }
+  }
+</style>
+
+<script>
+  (function() {
+    const productId = document.querySelector('[data-product-id]')?.dataset.productId;
+    const summaryContent = document.getElementById('summary-content');
+    const noRatings = document.getElementById('no-ratings');
+    const loadingEl = document.querySelector('.summary-loading');
+    const averageRatingEl = document.getElementById('average-rating');
+    const starsDisplayEl = document.getElementById('stars-display');
+    const totalReviewsEl = document.getElementById('total-reviews-count');
+    const distributionEl = document.getElementById('rating-distribution');
+    const filterBtns = document.querySelectorAll('.filter-btn');
+
+    let currentFilter = 'all';
+
+    async function fetchRatingSummary() {
+      if (!productId) {
+        showNoRatings();
+        return;
+      }
+
+      try {
+        const response = await fetch(`/apps/bolt-reviews/api/reviews/summary?productId=${productId}`);
+        if (!response.ok) throw new Error('Failed to fetch rating summary');
+
+        const data = await response.json();
+
+        if (!data.totalReviews || data.totalReviews === 0) {
+          showNoRatings();
+          return;
+        }
+
+        displaySummary(data);
+      } catch (error) {
+        console.error('Error fetching rating summary:', error);
+        showNoRatings();
+      }
+    }
+
+    function displaySummary(data) {
+      loadingEl.style.display = 'none';
+      summaryContent.style.display = 'block';
+
+      // Display average rating
+      averageRatingEl.textContent = data.averageRating.toFixed(1);
+
+      // Display stars
+      renderStars(data.averageRating);
+
+      // Display total count
+      if (totalReviewsEl) {
+        totalReviewsEl.textContent = data.totalReviews;
+      }
+
+      // Display distribution
+      if (distributionEl) {
+        displayDistribution(data.distribution, data.totalReviews);
+      }
+    }
+
+    function renderStars(rating) {
+      starsDisplayEl.innerHTML = '';
+      const fullStars = Math.floor(rating);
+      const hasHalfStar = rating % 1 >= 0.5;
+
+      for (let i = 1; i <= 5; i++) {
+        const star = document.createElement('span');
+        if (i <= fullStars) {
+          star.className = 'star filled';
+          star.innerHTML = '★';
+        } else if (i === fullStars + 1 && hasHalfStar) {
+          star.className = 'star half';
+          star.innerHTML = '★';
+        } else {
+          star.className = 'star empty';
+          star.innerHTML = '★';
+        }
+        starsDisplayEl.appendChild(star);
+      }
+    }
+
+    function displayDistribution(distribution, total) {
+      for (let rating = 5; rating >= 1; rating--) {
+        const count = distribution[rating] || 0;
+        const percentage = total > 0 ? (count / total) * 100 : 0;
+
+        const item = distributionEl.querySelector(`[data-rating="${rating}"]`);
+        if (item) {
+          const barFill = item.querySelector('.bar-fill');
+          const countEl = item.querySelector('.rating-count');
+
+          barFill.style.width = `${percentage}%`;
+          barFill.dataset.percentage = percentage;
+          countEl.textContent = count;
+        }
+      }
+    }
+
+    function showNoRatings() {
+      loadingEl.style.display = 'none';
+      noRatings.style.display = 'block';
+    }
+
+    // Filter functionality
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.filter;
+
+        // Update active state
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Emit custom event for reviews list to listen to
+        window.dispatchEvent(new CustomEvent('reviewFilterChange', {
+          detail: { filter }
+        }));
+
+        currentFilter = filter;
+      });
+    });
+
+    // Initialize
+    if (productId) {
+      fetchRatingSummary();
+    } else {
+      showNoRatings();
+    }
+
+    // Listen for review submissions to refresh summary
+    window.addEventListener('reviewSubmitted', () => {
+      fetchRatingSummary();
+    });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Rating Summary",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_distribution",
+      "label": "Show rating distribution",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_total_count",
+      "label": "Show total review count",
+      "default": true
+    }
+  ]
+}
+{% endschema %}

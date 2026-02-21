@@ -1,0 +1,70 @@
+api_version = "2024-10"
+
+[[extensions]]
+uid = "d40bf8ce-aa3c-5868-ba22-fe4fb0920fb061797446"
+type = "theme"
+name = "Bolt Reviews"
+handle = "bolt-reviews"
+
+[[extensions.blocks]]
+type = "reviews_list"
+name = "Reviews List"
+
+  [[extensions.blocks.settings]]
+  type = "range"
+  id = "reviews_per_page"
+  label = "Reviews per page"
+  default = 5
+  min = 1
+  max = 20
+  step = 1
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_photos"
+  label = "Show review photos"
+  default = true
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_verified_badge"
+  label = "Show verified purchase badge"
+  default = true
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_helpful_buttons"
+  label = "Show helpful buttons"
+  default = true
+
+[[extensions.blocks]]
+type = "review_form"
+name = "Write Review Form"
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "require_photo"
+  label = "Require photo upload"
+  default = false
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_email_field"
+  label = "Show email field"
+  default = true
+
+[[extensions.blocks]]
+type = "rating_summary"
+name = "Rating Summary"
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_distribution"
+  label = "Show rating distribution"
+  default = true
+
+  [[extensions.blocks.settings]]
+  type = "checkbox"
+  id = "show_total_count"
+  label = "Show total review count"
+  default = true

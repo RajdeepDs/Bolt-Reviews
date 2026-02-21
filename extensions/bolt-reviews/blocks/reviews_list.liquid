@@ -1,0 +1,544 @@
+{% comment %}
+  Reviews List Block
+  Displays a list of product reviews with ratings, photos, and helpful buttons
+{% endcomment %}
+
+<div class="reviews-list" data-product-id="{{ product.id }}">
+  <div class="reviews-container" id="reviews-container">
+    <div class="reviews-loading">
+      <div class="spinner"></div>
+      <p>Loading reviews...</p>
+    </div>
+  </div>
+
+  {% if block.settings.show_helpful_buttons %}
+    <input type="hidden" id="show-helpful-buttons" value="true">
+  {% endif %}
+
+  {% if block.settings.show_photos %}
+    <input type="hidden" id="show-photos" value="true">
+  {% endif %}
+
+  {% if block.settings.show_verified_badge %}
+    <input type="hidden" id="show-verified-badge" value="true">
+  {% endif %}
+
+  <input type="hidden" id="reviews-per-page" value="{{ block.settings.reviews_per_page }}">
+
+  <div class="reviews-pagination" id="reviews-pagination" style="display: none;">
+    <button class="btn-prev" id="reviews-prev" disabled>Previous</button>
+    <span class="page-info" id="page-info"></span>
+    <button class="btn-next" id="reviews-next">Next</button>
+  </div>
+</div>
+
+<template id="review-template">
+  <div class="review-item" data-review-id="">
+    <div class="review-header">
+      <div class="review-author-info">
+        <span class="review-author"></span>
+        <span class="verified-badge" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 0L10.163 5.518L16 6.408L12 10.296L12.944 16L8 13.518L3.056 16L4 10.296L0 6.408L5.837 5.518L8 0Z" fill="#4CAF50"/>
+          </svg>
+          Verified Purchase
+        </span>
+      </div>
+      <div class="review-rating">
+        <div class="stars"></div>
+      </div>
+    </div>
+
+    <div class="review-date"></div>
+
+    <div class="review-content">
+      <h4 class="review-title"></h4>
+      <p class="review-text"></p>
+    </div>
+
+    <div class="review-photos" style="display: none;">
+      <div class="photos-grid"></div>
+    </div>
+
+    <div class="review-footer">
+      <div class="review-helpful" style="display: none;">
+        <span class="helpful-text">Was this helpful?</span>
+        <button class="btn-helpful-yes" data-action="yes">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M14 6h-4.586l.293-2.707C9.707 2.575 9.575 2 9 2c-.417 0-.707.293-.793.707L7.414 6H4c-1.103 0-2 .897-2 2v6c0 1.103.897 2 2 2h8c.738 0 1.376-.405 1.723-1l2-4C16.277 10.138 16 9.362 16 8.5V8c0-1.103-.897-2-2-2z"/>
+          </svg>
+          <span class="helpful-count-yes">0</span>
+        </button>
+        <button class="btn-helpful-no" data-action="no">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M14 0H6c-.738 0-1.376.405-1.723 1l-2 4C1.723 5.862 2 6.638 2 7.5V8c0 1.103.897 2 2 2h4.586l-.293 2.707C8.293 13.425 8.425 14 9 14c.417 0 .707-.293.793-.707L10.586 10H14c1.103 0 2-.897 2-2V2c0-1.103-.897-2-2-2z"/>
+          </svg>
+          <span class="helpful-count-no">0</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .reviews-list {
+    margin: 2rem 0;
+    padding: 1rem;
+  }
+
+  .reviews-container {
+    min-height: 200px;
+  }
+
+  .reviews-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+  }
+
+  .spinner {
+    border: 3px solid rgba(0, 0, 0, 0.1);
+    border-top: 3px solid #333;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .review-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    background: #fff;
+    transition: box-shadow 0.2s;
+  }
+
+  .review-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+  }
+
+  .review-author-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .review-author {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #333;
+  }
+
+  .verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    color: #4CAF50;
+    font-weight: 500;
+  }
+
+  .review-rating .stars {
+    display: flex;
+    gap: 2px;
+  }
+
+  .star {
+    color: #FFB800;
+    font-size: 1.2rem;
+  }
+
+  .star.empty {
+    color: #E0E0E0;
+  }
+
+  .review-date {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 1rem;
+  }
+
+  .review-content {
+    margin-bottom: 1rem;
+  }
+
+  .review-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+    color: #222;
+  }
+
+  .review-text {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    color: #444;
+    margin: 0;
+  }
+
+  .review-photos {
+    margin: 1rem 0;
+  }
+
+  .photos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .review-photo {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    object-fit: cover;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .review-photo:hover {
+    transform: scale(1.05);
+  }
+
+  .review-footer {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .review-helpful {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .helpful-text {
+    font-size: 0.875rem;
+    color: #666;
+  }
+
+  .btn-helpful-yes,
+  .btn-helpful-no {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+  }
+
+  .btn-helpful-yes:hover {
+    background: #f5f5f5;
+    border-color: #4CAF50;
+    color: #4CAF50;
+  }
+
+  .btn-helpful-no:hover {
+    background: #f5f5f5;
+    border-color: #f44336;
+    color: #f44336;
+  }
+
+  .btn-helpful-yes.active {
+    background: #4CAF50;
+    color: #fff;
+    border-color: #4CAF50;
+  }
+
+  .btn-helpful-no.active {
+    background: #f44336;
+    color: #fff;
+    border-color: #f44336;
+  }
+
+  .reviews-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+  }
+
+  .btn-prev,
+  .btn-next {
+    padding: 0.5rem 1rem;
+    border: 1px solid #333;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .btn-prev:hover:not(:disabled),
+  .btn-next:hover:not(:disabled) {
+    background: #333;
+    color: #fff;
+  }
+
+  .btn-prev:disabled,
+  .btn-next:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .page-info {
+    font-size: 0.875rem;
+    color: #666;
+  }
+
+  .no-reviews {
+    text-align: center;
+    padding: 3rem;
+    color: #666;
+  }
+
+  @media (max-width: 768px) {
+    .review-header {
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .reviews-list {
+      padding: 0.5rem;
+    }
+
+    .review-item {
+      padding: 1rem;
+    }
+
+    .photos-grid {
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    }
+  }
+</style>
+
+<script>
+  (function() {
+    const productId = document.querySelector('[data-product-id]')?.dataset.productId;
+    const container = document.getElementById('reviews-container');
+    const pagination = document.getElementById('reviews-pagination');
+    const prevBtn = document.getElementById('reviews-prev');
+    const nextBtn = document.getElementById('reviews-next');
+    const pageInfo = document.getElementById('page-info');
+    const template = document.getElementById('review-template');
+
+    const showHelpful = document.getElementById('show-helpful-buttons')?.value === 'true';
+    const showPhotos = document.getElementById('show-photos')?.value === 'true';
+    const showVerified = document.getElementById('show-verified-badge')?.value === 'true';
+    const perPage = parseInt(document.getElementById('reviews-per-page')?.value || '5');
+
+    let currentPage = 1;
+    let totalPages = 1;
+    let allReviews = [];
+
+    async function fetchReviews() {
+      try {
+        const response = await fetch(`/apps/bolt-reviews/api/reviews?productId=${productId}`);
+        if (!response.ok) throw new Error('Failed to fetch reviews');
+
+        const data = await response.json();
+        allReviews = data.reviews || [];
+        totalPages = Math.ceil(allReviews.length / perPage);
+
+        if (allReviews.length === 0) {
+          container.innerHTML = '<div class="no-reviews"><p>No reviews yet. Be the first to review this product!</p></div>';
+          return;
+        }
+
+        renderReviews();
+        updatePagination();
+      } catch (error) {
+        console.error('Error fetching reviews:', error);
+        container.innerHTML = '<div class="no-reviews"><p>Unable to load reviews. Please try again later.</p></div>';
+      }
+    }
+
+    function renderReviews() {
+      const start = (currentPage - 1) * perPage;
+      const end = start + perPage;
+      const reviewsToShow = allReviews.slice(start, end);
+
+      container.innerHTML = '';
+
+      reviewsToShow.forEach(review => {
+        const reviewEl = template.content.cloneNode(true);
+        const reviewItem = reviewEl.querySelector('.review-item');
+
+        reviewItem.dataset.reviewId = review.id;
+        reviewEl.querySelector('.review-author').textContent = review.customerName || 'Anonymous';
+        reviewEl.querySelector('.review-title').textContent = review.title || '';
+        reviewEl.querySelector('.review-text').textContent = review.content || '';
+        reviewEl.querySelector('.review-date').textContent = new Date(review.createdAt).toLocaleDateString();
+
+        // Render stars
+        const starsContainer = reviewEl.querySelector('.stars');
+        starsContainer.innerHTML = '';
+        for (let i = 1; i <= 5; i++) {
+          const star = document.createElement('span');
+          star.className = i <= review.rating ? 'star filled' : 'star empty';
+          star.innerHTML = '★';
+          starsContainer.appendChild(star);
+        }
+
+        // Show verified badge
+        if (showVerified && review.verified) {
+          reviewEl.querySelector('.verified-badge').style.display = 'inline-flex';
+        }
+
+        // Show photos
+        if (showPhotos && review.photos && review.photos.length > 0) {
+          const photosContainer = reviewEl.querySelector('.review-photos');
+          const photosGrid = reviewEl.querySelector('.photos-grid');
+          photosContainer.style.display = 'block';
+
+          review.photos.forEach(photo => {
+            const img = document.createElement('img');
+            img.src = photo;
+            img.alt = 'Review photo';
+            img.className = 'review-photo';
+            img.onclick = () => window.open(photo, '_blank');
+            photosGrid.appendChild(img);
+          });
+        }
+
+        // Show helpful buttons
+        if (showHelpful) {
+          const helpfulContainer = reviewEl.querySelector('.review-helpful');
+          helpfulContainer.style.display = 'flex';
+
+          const yesBtn = reviewEl.querySelector('.btn-helpful-yes');
+          const noBtn = reviewEl.querySelector('.btn-helpful-no');
+          const yesCount = reviewEl.querySelector('.helpful-count-yes');
+          const noCount = reviewEl.querySelector('.helpful-count-no');
+
+          yesCount.textContent = review.helpfulCount || 0;
+          noCount.textContent = review.notHelpfulCount || 0;
+
+          yesBtn.onclick = () => markHelpful(review.id, 'yes', yesBtn, noBtn);
+          noBtn.onclick = () => markHelpful(review.id, 'no', yesBtn, noBtn);
+        }
+
+        container.appendChild(reviewEl);
+      });
+    }
+
+    function updatePagination() {
+      if (totalPages <= 1) {
+        pagination.style.display = 'none';
+        return;
+      }
+
+      pagination.style.display = 'flex';
+      pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage === totalPages;
+    }
+
+    async function markHelpful(reviewId, action, yesBtn, noBtn) {
+      try {
+        const response = await fetch(`/apps/bolt-reviews/api/reviews/${reviewId}/helpful`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ helpful: action === 'yes' })
+        });
+
+        if (!response.ok) throw new Error('Failed to mark as helpful');
+
+        const data = await response.json();
+
+        if (action === 'yes') {
+          yesBtn.classList.add('active');
+          noBtn.classList.remove('active');
+          yesBtn.querySelector('.helpful-count-yes').textContent = data.helpfulCount;
+        } else {
+          noBtn.classList.add('active');
+          yesBtn.classList.remove('active');
+          noBtn.querySelector('.helpful-count-no').textContent = data.notHelpfulCount;
+        }
+      } catch (error) {
+        console.error('Error marking review as helpful:', error);
+      }
+    }
+
+    prevBtn?.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderReviews();
+        updatePagination();
+        container.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+
+    nextBtn?.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        renderReviews();
+        updatePagination();
+        container.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+
+    if (productId) {
+      fetchReviews();
+    }
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Reviews List",
+  "target": "section",
+  "settings": [
+    {
+      "type": "range",
+      "id": "reviews_per_page",
+      "label": "Reviews per page",
+      "min": 1,
+      "max": 20,
+      "step": 1,
+      "default": 5
+    },
+    {
+      "type": "checkbox",
+      "id": "show_photos",
+      "label": "Show review photos",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_verified_badge",
+      "label": "Show verified purchase badge",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "show_helpful_buttons",
+      "label": "Show helpful buttons",
+      "default": true
+    }
+  ]
+}
+{% endschema %}

@@ -1,0 +1,117 @@
+{% comment %}
+  Star Rating Snippet
+  Usage: {% render 'star-rating', rating: 4.5, size: 'medium' %}
+
+  Parameters:
+  - rating: Number (1-5, supports decimals)
+  - size: String ('small', 'medium', 'large')
+  - show_count: Boolean (optional)
+  - count: Number (optional, total reviews count)
+{% endcomment %}
+
+{% assign rating_value = rating | default: 0 %}
+{% assign size_class = size | default: 'medium' %}
+{% assign full_stars = rating_value | floor %}
+{% assign decimal = rating_value | modulo: 1 %}
+{% assign has_half_star = false %}
+{% assign next_star = full_stars | plus: 1 %}
+
+{% if decimal >= 0.25 and decimal < 0.75 %}
+  {% assign has_half_star = true %}
+{% elsif decimal >= 0.75 %}
+  {% assign full_stars = full_stars | plus: 1 %}
+  {% assign next_star = full_stars | plus: 1 %}
+{% endif %}
+
+<div class="star-rating star-rating--{{ size_class }}"
+     role="img"
+     aria-label="{{ rating_value }} out of 5 stars">
+  <div class="star-rating__stars">
+    {% for i in (1..5) %}
+      {% if i <= full_stars %}
+        <span class="star star--filled" aria-hidden="true">★</span>
+      {% elsif i == next_star and has_half_star %}
+        <span class="star star--half" aria-hidden="true">
+          <span class="star__full">★</span>
+          <span class="star__empty">★</span>
+        </span>
+      {% else %}
+        <span class="star star--empty" aria-hidden="true">★</span>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if show_count and count %}
+    <span class="star-rating__count">({{ count }})</span>
+  {% endif %}
+</div>
+
+<style>
+  .star-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .star-rating__stars {
+    display: flex;
+    gap: 2px;
+    line-height: 1;
+  }
+
+  .star {
+    display: inline-block;
+    line-height: 1;
+  }
+
+  .star--filled {
+    color: #FFB800;
+  }
+
+  .star--empty {
+    color: #E0E0E0;
+  }
+
+  .star--half {
+    position: relative;
+    display: inline-block;
+  }
+
+  .star--half .star__empty {
+    color: #E0E0E0;
+  }
+
+  .star--half .star__full {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 50%;
+    overflow: hidden;
+    color: #FFB800;
+  }
+
+  /* Size variants */
+  .star-rating--small .star {
+    font-size: 0.875rem;
+  }
+
+  .star-rating--medium .star {
+    font-size: 1.125rem;
+  }
+
+  .star-rating--large .star {
+    font-size: 1.5rem;
+  }
+
+  .star-rating__count {
+    font-size: 0.875rem;
+    color: #666;
+    font-weight: 500;
+  }
+
+  @media (max-width: 768px) {
+    .star-rating--large .star {
+      font-size: 1.25rem;
+    }
+  }
+</style>
