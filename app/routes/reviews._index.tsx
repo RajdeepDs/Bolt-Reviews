@@ -1,39 +1,228 @@
-import { useState } from "react";
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useState, useEffect } from "react";
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+  ActionFunctionArgs,
+} from "react-router";
+import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
-  return null;
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status") || "all";
+  const search = url.searchParams.get("search") || "";
+  const rating = url.searchParams.get("rating");
+
+  // Build where clause
+  const where: {
+    shopId: string;
+    status?: string;
+    rating?: { lte: number } | number;
+    OR?: Array<{
+      customerName?: { contains: string; mode: "insensitive" };
+      title?: { contains: string; mode: "insensitive" };
+      content?: { contains: string; mode: "insensitive" };
+    }>;
+  } = {
+    shopId: session.shop,
+  };
+
+  // Filter by status
+  if (status !== "all") {
+    where.status = status;
+  }
+
+  // Filter by rating
+  if (rating) {
+    if (rating === "low") {
+      where.rating = { lte: 2 };
+    } else {
+      where.rating = parseInt(rating);
+    }
+  }
+
+  // Search functionality
+  if (search) {
+    where.OR = [
+      { customerName: { contains: search, mode: "insensitive" } },
+      { title: { contains: search, mode: "insensitive" } },
+      { content: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  // Get reviews
+  const [reviews, statusCounts] = await Promise.all([
+    prisma.review.findMany({
+      where,
+      include: {
+        product: {
+          select: {
+            id: true,
+            title: true,
+            handle: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 100,
+    }),
+    prisma.review.groupBy({
+      by: ["status"],
+      where: {
+        shopId: session.shop,
+      },
+      _count: {
+        status: true,
+      },
+    }),
+  ]);
+
+  const counts = {
+    all: reviews.length,
+    pending: 0,
+    published: 0,
+    rejected: 0,
+  };
+
+  statusCounts.forEach(
+    (item: { status: string; _count: { status: number } }) => {
+      if (item.status === "pending") counts.pending = item._count.status;
+      if (item.status === "published") counts.published = item._count.status;
+      if (item.status === "rejected") counts.rejected = item._count.status;
+    },
+  );
+
+  return { reviews, counts };
 };
-const dummyReviews = [
-  {
-    id: "1",
-    author: "Amelia",
-    rating: 5,
-    title: "Height and Posture Boost in Weeks",
-    content:
-      "These gummies are delicious and surprisingly effective. Friends started asking what our secret is.",
-    product: "Nourae™ Viral Heightener Gummies",
-    date: "2026-01-12",
-    hasImage: true,
-    status: "published",
-  },
-  {
-    id: "2",
-    author: "Mira",
-    rating: 2,
-    title: "Packaging was damaged",
-    content:
-      "Product works but packaging arrived broken. Please improve shipping.",
-    product: "Posture Corrector Pro",
-    date: "2026-01-10",
-    hasImage: false,
-    status: "pending",
-  },
-];
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const actionType = formData.get("actionType") as string;
+  const reviewIds = formData.get("reviewIds") as string;
+
+  const ids = reviewIds ? JSON.parse(reviewIds) : [];
+
+  try {
+    switch (actionType) {
+      case "publish":
+        await prisma.review.updateMany({
+          where: {
+            id: { in: ids },
+            shopId: session.shop,
+          },
+          data: { status: "published" },
+        });
+
+        // Update product stats for affected products
+        {
+          const publishedReviews = await prisma.review.findMany({
+            where: { id: { in: ids } },
+            select: { productId: true },
+          });
+          const productIds = [
+            ...new Set(
+              publishedReviews.map((r: { productId: string }) => r.productId),
+            ),
+          ];
+
+          for (const productId of productIds) {
+            await updateProductStats(productId);
+          }
+        }
+
+        break;
+
+      case "unpublish":
+        {
+          await prisma.review.updateMany({
+            where: {
+              id: { in: ids },
+              shopId: session.shop,
+            },
+            data: { status: "pending" },
+          });
+
+          const unpublishedReviews = await prisma.review.findMany({
+            where: { id: { in: ids } },
+            select: { productId: true },
+          });
+          const unpublishProductIds = [
+            ...new Set(
+              unpublishedReviews.map((r: { productId: string }) => r.productId),
+            ),
+          ];
+
+          for (const productId of unpublishProductIds) {
+            await updateProductStats(productId);
+          }
+        }
+        break;
+
+      case "delete":
+        {
+          const reviewsToDelete = await prisma.review.findMany({
+            where: {
+              id: { in: ids },
+              shopId: session.shop,
+            },
+            select: { productId: true },
+          });
+          const deleteProductIds = [
+            ...new Set(
+              reviewsToDelete.map((r: { productId: string }) => r.productId),
+            ),
+          ];
+
+          await prisma.review.deleteMany({
+            where: {
+              id: { in: ids },
+              shopId: session.shop,
+            },
+          });
+
+          for (const productId of deleteProductIds) {
+            await updateProductStats(productId);
+          }
+        }
+        break;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Action error:", error);
+    return { success: false, error: (error as Error).message };
+  }
+};
+
+async function updateProductStats(productId: string) {
+  const stats = await prisma.review.aggregate({
+    where: {
+      productId,
+      status: "published",
+    },
+    _avg: {
+      rating: true,
+    },
+    _count: {
+      id: true,
+    },
+  });
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: {
+      averageRating: stats._avg.rating || 0,
+      reviewCount: stats._count.id,
+    },
+  });
+}
 
 function formatDate(dateString: string) {
   const date = new Date(dateString);
@@ -55,23 +244,27 @@ function formatDate(dateString: string) {
 }
 
 export default function ReviewsIndex() {
+  const { reviews, counts } = useLoaderData<typeof loader>();
+  const submit = useSubmit();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
   const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
   const [filter, setFilter] = useState<"all" | "low" | "pending">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredReviews = dummyReviews.filter((review) => {
-    // Apply filter
+  // Client-side filtering
+  const filteredReviews = reviews.filter((review: any) => {
     let matchesFilter = true;
     if (filter === "low") matchesFilter = review.rating <= 2;
     if (filter === "pending") matchesFilter = review.status === "pending";
 
-    // Apply search
     const matchesSearch =
       searchQuery === "" ||
-      review.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      review.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       review.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       review.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      review.product.toLowerCase().includes(searchQuery.toLowerCase());
+      review.product.title.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesFilter && matchesSearch;
   });
@@ -90,70 +283,65 @@ export default function ReviewsIndex() {
     );
   };
 
-  const handlePublishSelected = () => {
-    // Only publish pending reviews
-    const pendingToPublish = selectedReviews.filter((id) => {
-      const review = dummyReviews.find((r) => r.id === id);
-      return review?.status === "pending";
-    });
+  const handleBulkAction = (actionType: string) => {
+    const formData = new FormData();
+    formData.append("actionType", actionType);
+    formData.append("reviewIds", JSON.stringify(selectedReviews));
 
-    if (pendingToPublish.length === 0) {
-      console.log("No pending reviews to publish");
-      // You can show a toast message here
-      return;
-    }
-
-    console.log("Publishing pending reviews:", pendingToPublish);
-    // Add your publish logic here
-    setSelectedReviews([]);
-  };
-
-  const handleUnpublishSelected = () => {
-    // Only unpublish published reviews
-    const publishedToUnpublish = selectedReviews.filter((id) => {
-      const review = dummyReviews.find((r) => r.id === id);
-      return review?.status === "published";
-    });
-
-    if (publishedToUnpublish.length === 0) {
-      console.log("No published reviews to unpublish");
-      return;
-    }
-
-    console.log("Unpublishing reviews:", publishedToUnpublish);
-    // Add your unpublish logic here
+    submit(formData, { method: "post" });
     setSelectedReviews([]);
   };
 
   // Count how many selected reviews are pending
   const selectedPendingCount = selectedReviews.filter((id) => {
-    const review = dummyReviews.find((r) => r.id === id);
+    const review = reviews.find((r: any) => r.id === id);
     return review?.status === "pending";
   }).length;
 
   // Count how many selected reviews are published
   const selectedPublishedCount = selectedReviews.filter((id) => {
-    const review = dummyReviews.find((r) => r.id === id);
+    const review = reviews.find((r: any) => r.id === id);
     return review?.status === "published";
   }).length;
 
+  // Clear selection when submitting completes
+  useEffect(() => {
+    if (!isSubmitting && selectedReviews.length > 0) {
+      setSelectedReviews([]);
+    }
+  }, [isSubmitting, selectedReviews.length]);
+
   return (
     <s-page heading="My Reviews" inlineSize="base">
-      <s-button slot="secondary-actions" commandfor="more-actions-id">
+      <s-button slot="secondary-actions" commandFor="more-actions-id">
         More actions
       </s-button>
       <s-menu id="more-actions-id">
-        <s-button onClick={() => shopify.toast.show("Imported...")}>
+        <s-button
+          onClick={() =>
+            (window as any).shopify?.toast?.show("Coming soon...") ||
+            console.log("Coming soon...")
+          }
+        >
           Import reviews
         </s-button>
-        <s-button onClick={() => shopify.toast.show("Exported...")}>
+        <s-button
+          onClick={() =>
+            (window as any).shopify?.toast?.show("Coming soon...") ||
+            console.log("Coming soon...")
+          }
+        >
           Export reviews
         </s-button>
       </s-menu>
       {selectedReviews.length > 0 && (
         <>
           {selectedPendingCount > 0 && (
-            <s-button slot="primary-action" onClick={handlePublishSelected}>
+            <s-button
+              slot="primary-action"
+              onClick={() => handleBulkAction("publish")}
+              disabled={isSubmitting}
+            >
               Publish ({selectedPendingCount})
             </s-button>
           )}
@@ -161,7 +349,8 @@ export default function ReviewsIndex() {
           <s-button
             slot="secondary-actions"
             tone="critical"
-            onClick={() => setSelectedReviews([])}
+            onClick={() => handleBulkAction("delete")}
+            disabled={isSubmitting}
           >
             Delete
           </s-button>
@@ -172,7 +361,8 @@ export default function ReviewsIndex() {
                   ? "secondary-actions"
                   : "primary-action"
               }
-              onClick={handleUnpublishSelected}
+              onClick={() => handleBulkAction("unpublish")}
+              disabled={isSubmitting}
             >
               Unpublish ({selectedPublishedCount})
             </s-button>
@@ -188,7 +378,7 @@ export default function ReviewsIndex() {
                 variant={filter === "all" ? "secondary" : "tertiary"}
                 onClick={() => setFilter("all")}
               >
-                All
+                All ({counts.all})
               </s-button>
               <s-button
                 variant={filter === "low" ? "secondary" : "tertiary"}
@@ -200,16 +390,16 @@ export default function ReviewsIndex() {
                 variant={filter === "pending" ? "secondary" : "tertiary"}
                 onClick={() => setFilter("pending")}
               >
-                Pending
+                Pending ({counts.pending})
               </s-button>
             </s-stack>
             <s-text-field
               label="Search reviews"
               labelAccessibilityVisibility="exclusive"
               icon="search"
-              placeholder="Searching all reviews"
+              placeholder="Search all reviews"
               value={searchQuery}
-              onInput={(e) => setSearchQuery(e.target?.value)}
+              onInput={(e: any) => setSearchQuery(e.target?.value || "")}
             />
           </s-grid>
           {/* TABLE HEADER */}
@@ -233,53 +423,74 @@ export default function ReviewsIndex() {
 
           {/* TABLE BODY */}
           <s-table-body>
-            {filteredReviews.map((review) => (
-              <s-table-row key={review.id}>
-                {/* CHECKBOX */}
+            {filteredReviews.length === 0 ? (
+              <s-table-row>
                 <s-table-cell>
-                  <s-checkbox
-                    checked={selectedReviews.includes(review.id)}
-                    onInput={() => toggleReview(review.id)}
-                  />
-                </s-table-cell>
-
-                {/* CUSTOMER */}
-                <s-table-cell>
-                  <s-text>{review.author}</s-text>
-                </s-table-cell>
-
-                {/* TITLE */}
-                <s-table-cell>
-                  <s-stack gap="small">
-                    <s-text>{review.title}</s-text>
-                  </s-stack>
-                </s-table-cell>
-
-                {/* RATING */}
-                <s-table-cell>
-                  <s-text>{review.rating} stars</s-text>
-                </s-table-cell>
-
-                {/* PRODUCT */}
-                <s-table-cell>
-                  <s-text>{review.product}</s-text>
-                </s-table-cell>
-
-                {/* DATE */}
-                <s-table-cell>
-                  <s-text>{formatDate(review.date)}</s-text>
-                </s-table-cell>
-
-                {/* STATUS */}
-                <s-table-cell>
-                  <s-badge
-                    tone={review.status === "published" ? "success" : "warning"}
-                  >
-                    {review.status === "published" ? "Published" : "Pending"}
-                  </s-badge>
+                  <s-box padding="large">
+                    <s-text>
+                      {searchQuery || filter !== "all"
+                        ? "No reviews found matching your filters"
+                        : "No reviews yet. Reviews will appear here once customers start leaving feedback."}
+                    </s-text>
+                  </s-box>
                 </s-table-cell>
               </s-table-row>
-            ))}
+            ) : (
+              filteredReviews.map((review: any) => (
+                <s-table-row key={review.id}>
+                  {/* CHECKBOX */}
+                  <s-table-cell>
+                    <s-checkbox
+                      checked={selectedReviews.includes(review.id)}
+                      onInput={() => toggleReview(review.id)}
+                    />
+                  </s-table-cell>
+
+                  {/* CUSTOMER */}
+                  <s-table-cell>
+                    <s-text>{review.customerName}</s-text>
+                  </s-table-cell>
+
+                  {/* TITLE */}
+                  <s-table-cell>
+                    <s-stack gap="small">
+                      <s-text>{review.title}</s-text>
+                    </s-stack>
+                  </s-table-cell>
+
+                  {/* RATING */}
+                  <s-table-cell>
+                    <s-text>{"⭐".repeat(review.rating)}</s-text>
+                  </s-table-cell>
+
+                  {/* PRODUCT */}
+                  <s-table-cell>
+                    <s-text>{review.product.title}</s-text>
+                  </s-table-cell>
+
+                  {/* DATE */}
+                  <s-table-cell>
+                    <s-text>{formatDate(review.createdAt.toString())}</s-text>
+                  </s-table-cell>
+
+                  {/* STATUS */}
+                  <s-table-cell>
+                    <s-badge
+                      tone={
+                        review.status === "published"
+                          ? "success"
+                          : review.status === "rejected"
+                            ? "critical"
+                            : "warning"
+                      }
+                    >
+                      {review.status.charAt(0).toUpperCase() +
+                        review.status.slice(1)}
+                    </s-badge>
+                  </s-table-cell>
+                </s-table-row>
+              ))
+            )}
           </s-table-body>
         </s-table>
       </s-section>
