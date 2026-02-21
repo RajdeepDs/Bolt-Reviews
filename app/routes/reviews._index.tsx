@@ -264,7 +264,7 @@ export default function ReviewsIndex() {
   // Client-side filtering
   const filteredReviews = reviews.filter((review) => {
     let matchesFilter = true;
-    if (filter === "low") matchesFilter = review.rating <= 2;
+    if (filter === "low") matchesFilter = review.rating <= 3;
     if (filter === "pending") matchesFilter = review.status === "pending";
 
     const matchesSearch =
@@ -277,8 +277,12 @@ export default function ReviewsIndex() {
     return matchesFilter && matchesSearch;
   });
 
-  const toggleSelectAll = () => {
-    if (selectedReviews.length === filteredReviews.length) {
+  const toggleSelectAll = (e: any) => {
+    e?.preventDefault?.();
+    if (
+      selectedReviews.length === filteredReviews.length &&
+      filteredReviews.length > 0
+    ) {
       setSelectedReviews([]);
     } else {
       setSelectedReviews(filteredReviews.map((r) => r.id));
@@ -286,9 +290,13 @@ export default function ReviewsIndex() {
   };
 
   const toggleReview = (id: string) => {
-    setSelectedReviews((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
-    );
+    setSelectedReviews((prev) => {
+      if (prev.includes(id)) {
+        return prev.filter((i) => i !== id);
+      } else {
+        return [...prev, id];
+      }
+    });
   };
 
   const handleBulkAction = (actionType: string) => {
@@ -314,10 +322,10 @@ export default function ReviewsIndex() {
 
   // Clear selection when submitting completes
   useEffect(() => {
-    if (!isSubmitting && selectedReviews.length > 0) {
-      setSelectedReviews([]);
+    if (!isSubmitting) {
+      // Don't clear automatically - let user control it
     }
-  }, [isSubmitting, selectedReviews.length]);
+  }, [isSubmitting]);
 
   const handleExport = () => {
     window.open("/api/reviews/export", "_blank");
@@ -445,19 +453,28 @@ export default function ReviewsIndex() {
             <s-stack direction="inline">
               <s-button
                 variant={filter === "all" ? "secondary" : "tertiary"}
-                onClick={() => setFilter("all")}
+                onClick={() => {
+                  setFilter("all");
+                  setSelectedReviews([]);
+                }}
               >
                 All ({counts.all})
               </s-button>
               <s-button
                 variant={filter === "low" ? "secondary" : "tertiary"}
-                onClick={() => setFilter("low")}
+                onClick={() => {
+                  setFilter("low");
+                  setSelectedReviews([]);
+                }}
               >
-                Low ratings
+                Low ratings (≤3★)
               </s-button>
               <s-button
                 variant={filter === "pending" ? "secondary" : "tertiary"}
-                onClick={() => setFilter("pending")}
+                onClick={() => {
+                  setFilter("pending");
+                  setSelectedReviews([]);
+                }}
               >
                 Pending ({counts.pending})
               </s-button>
