@@ -1,10 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type {
   HeadersFunction,
   LoaderFunctionArgs,
   ActionFunctionArgs,
 } from "react-router";
-import { useLoaderData, useSubmit, useNavigation } from "react-router";
+import {
+  useLoaderData,
+  useSubmit,
+  useNavigation,
+  useFetcher,
+} from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
@@ -247,14 +252,17 @@ export default function ReviewsIndex() {
   const { reviews, counts } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
+  const fetcher = useFetcher();
   const isSubmitting = navigation.state === "submitting";
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
   const [filter, setFilter] = useState<"all" | "low" | "pending">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
   // Client-side filtering
-  const filteredReviews = reviews.filter((review: any) => {
+  const filteredReviews = reviews.filter((review) => {
     let matchesFilter = true;
     if (filter === "low") matchesFilter = review.rating <= 2;
     if (filter === "pending") matchesFilter = review.status === "pending";
@@ -294,13 +302,13 @@ export default function ReviewsIndex() {
 
   // Count how many selected reviews are pending
   const selectedPendingCount = selectedReviews.filter((id) => {
-    const review = reviews.find((r: any) => r.id === id);
+    const review = reviews.find((r) => r.id === id);
     return review?.status === "pending";
   }).length;
 
   // Count how many selected reviews are published
   const selectedPublishedCount = selectedReviews.filter((id) => {
-    const review = reviews.find((r: any) => r.id === id);
+    const review = reviews.find((r) => r.id === id);
     return review?.status === "published";
   }).length;
 
@@ -311,27 +319,88 @@ export default function ReviewsIndex() {
     }
   }, [isSubmitting, selectedReviews.length]);
 
+  const handleExport = () => {
+    window.open("/api/reviews/export", "_blank");
+    const shopify = (window as any).shopify;
+    if (shopify?.toast?.show) {
+      shopify.toast.show("Exporting reviews...");
+    } else {
+      console.log("Exporting reviews...");
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    fetcher.submit(formData, {
+      method: "post",
+      action: "/api/reviews/import",
+      encType: "multipart/form-data",
+    });
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Handle import completion
+  useEffect(() => {
+    if (isImporting && fetcher.state === "idle" && fetcher.data) {
+      setIsImporting(false);
+      const data = fetcher.data as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      };
+      const shopify = (window as any).shopify;
+
+      if (data.success) {
+        if (shopify?.toast?.show) {
+          shopify.toast.show(data.message || "Reviews imported successfully");
+        }
+        // Reload the page to show new reviews
+        window.location.reload();
+      } else {
+        if (shopify?.toast?.show) {
+          shopify.toast.show(data.error || "Import failed", { isError: true });
+        }
+      }
+    }
+  }, [isImporting, fetcher.state, fetcher.data]);
+
   return (
     <s-page heading="My Reviews" inlineSize="base">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
       <s-button slot="secondary-actions" commandFor="more-actions-id">
         More actions
       </s-button>
       <s-menu id="more-actions-id">
-        <s-button
-          onClick={() =>
-            (window as any).shopify?.toast?.show("Coming soon...") ||
-            console.log("Coming soon...")
-          }
-        >
-          Import reviews
+        <s-button onClick={handleImportClick} disabled={isImporting}>
+          {isImporting ? "Importing..." : "Import reviews (CSV)"}
         </s-button>
+        <s-button onClick={handleExport}>Export reviews (CSV)</s-button>
         <s-button
-          onClick={() =>
-            (window as any).shopify?.toast?.show("Coming soon...") ||
-            console.log("Coming soon...")
-          }
+          onClick={() => window.open("/api/reviews/template", "_blank")}
         >
-          Export reviews
+          Download CSV Template
         </s-button>
       </s-menu>
       {selectedReviews.length > 0 && (
@@ -436,7 +505,7 @@ export default function ReviewsIndex() {
                 </s-table-cell>
               </s-table-row>
             ) : (
-              filteredReviews.map((review: any) => (
+              filteredReviews.map((review) => (
                 <s-table-row key={review.id}>
                   {/* CHECKBOX */}
                   <s-table-cell>
