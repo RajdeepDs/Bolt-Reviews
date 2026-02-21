@@ -9,7 +9,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
   if (url.searchParams.get("shop")) {
-    throw redirect(`/dashboard?${url.searchParams.toString()}`);
+    throw redirect(`/reviews?${url.searchParams.toString()}`);
   }
 
   return { showForm: Boolean(login) };
