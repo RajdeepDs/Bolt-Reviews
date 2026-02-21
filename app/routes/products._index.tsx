@@ -58,11 +58,24 @@ export default function ProductsIndex() {
     }
   }
 
+  const handleSetup = async () => {
+    setIsSyncing(true);
+    fetcher.submit({}, { method: "post", action: "/api/setup" });
+  };
+
   return (
     <s-page heading="Products" inlineSize="base">
       <s-button slot="primary-action" onClick={handleSync} disabled={isSyncing}>
         {isSyncing ? "Syncing..." : "Sync Products"}
       </s-button>
+      <s-button slot="secondary-actions" commandFor="products-menu">
+        More actions
+      </s-button>
+      <s-menu id="products-menu">
+        <s-button onClick={handleSetup} disabled={isSyncing}>
+          Run Setup (Sync + Settings)
+        </s-button>
+      </s-menu>
       <s-section padding="none">
         <s-table>
           {/* Header Row */}
