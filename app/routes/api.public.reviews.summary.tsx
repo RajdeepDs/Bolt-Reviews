@@ -20,10 +20,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   try {
-    // Find the product by Shopify product ID
+    // Find the product by Shopify product ID - check both formats (numeric and GID)
+    const gidFormat = `gid://shopify/Product/${shopifyProductId}`;
     const product = await prisma.product.findFirst({
       where: {
-        shopifyProductId: shopifyProductId,
+        OR: [
+          { shopifyProductId: shopifyProductId },
+          { shopifyProductId: gidFormat },
+        ],
       },
       select: {
         id: true,
