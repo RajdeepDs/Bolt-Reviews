@@ -297,16 +297,19 @@
     let currentFilter = 'all';
 
     async function fetchRatingSummary() {
+      console.log('Fetching rating summary for product ID:', productId);
       if (!productId) {
         showNoRatings();
         return;
       }
 
       try {
-        const response = await fetch(`/apps/bolt-reviews/api/reviews/summary?productId=${productId}`);
+        const response = await fetch(`https://vinyl-boss-checklist-eligible.trycloudflare.com/api/public/reviews/summary?productId=${productId}`);
+        console.log('Summary response status:', response.status);
         if (!response.ok) throw new Error('Failed to fetch rating summary');
 
         const data = await response.json();
+        console.log('Summary data:', data);
 
         if (!data.totalReviews || data.totalReviews === 0) {
           showNoRatings();
@@ -316,6 +319,7 @@
         displaySummary(data);
       } catch (error) {
         console.error('Error fetching rating summary:', error);
+        console.error('Product ID was:', productId);
         showNoRatings();
       }
     }

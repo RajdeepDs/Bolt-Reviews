@@ -5,8 +5,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const shopifyProductId = url.searchParams.get("productId");
 
+  const corsHeaders = new Headers({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json",
+  });
+
   if (!shopifyProductId) {
-    return Response.json({ error: "Product ID is required" }, { status: 400 });
+    return new Response(JSON.stringify({ error: "Product ID is required" }), {
+      status: 400,
+      headers: corsHeaders,
+    });
   }
 
   try {
@@ -22,17 +32,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     // If product doesn't exist, return empty summary
     if (!product) {
-      return Response.json({
-        totalReviews: 0,
-        averageRating: 0,
-        distribution: {
-          1: 0,
-          2: 0,
-          3: 0,
-          4: 0,
-          5: 0,
-        },
-      });
+      return new Response(
+        JSON.stringify({
+          totalReviews: 0,
+          averageRating: 0,
+          distribution: {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+            5: 0,
+          },
+        }),
+        { headers: corsHeaders },
+      );
     }
 
     const reviews = await prisma.review.findMany({
@@ -46,17 +59,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
 
     if (reviews.length === 0) {
-      return Response.json({
-        totalReviews: 0,
-        averageRating: 0,
-        distribution: {
-          1: 0,
-          2: 0,
-          3: 0,
-          4: 0,
-          5: 0,
-        },
-      });
+      return new Response(
+        JSON.stringify({
+          totalReviews: 0,
+          averageRating: 0,
+          distribution: {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+            5: 0,
+          },
+        }),
+        { headers: corsHeaders },
+      );
     }
 
     const totalReviews = reviews.length;
@@ -71,16 +87,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
       { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<number, number>,
     );
 
-    return Response.json({
-      totalReviews,
-      averageRating: Math.round(averageRating * 10) / 10,
-      distribution,
-    });
+    return new Response(
+      JSON.stringify({
+        totalReviews,
+        averageRating: Math.round(averageRating * 10) / 10,
+        distribution,
+      }),
+      { headers: corsHeaders },
+    );
   } catch (error) {
     console.error("Error fetching review summary:", error);
-    return Response.json(
-      { error: "Failed to fetch review summary" },
-      { status: 500 },
+    return new Response(
+      JSON.stringify({ error: "Failed to fetch review summary" }),
+      { status: 500, headers: corsHeaders },
     );
   }
 }

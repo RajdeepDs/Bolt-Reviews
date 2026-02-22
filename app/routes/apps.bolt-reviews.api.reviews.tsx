@@ -3,22 +3,45 @@ import prisma from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const productId = url.searchParams.get("productId");
+  const shopifyProductId = url.searchParams.get("productId");
   const rating = url.searchParams.get("rating");
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = parseInt(url.searchParams.get("limit") || "10");
 
-  if (!productId) {
+  if (!shopifyProductId) {
     return Response.json({ error: "Product ID is required" }, { status: 400 });
   }
 
   try {
+    // Find the product by Shopify product ID
+    const product = await prisma.product.findFirst({
+      where: {
+        shopifyProductId: shopifyProductId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    // If product doesn't exist, return empty reviews
+    if (!product) {
+      return Response.json({
+        reviews: [],
+        pagination: {
+          page,
+          limit,
+          total: 0,
+          pages: 0,
+        },
+      });
+    }
+
     const where: {
       productId: string;
       status: string;
       rating?: number;
     } = {
-      productId,
+      productId: product.id,
       status: "published",
     };
 
