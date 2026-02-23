@@ -2,7 +2,7 @@
 
 client_id = "615ec8859d5afc0295b32dbd7fa26e0d"
 name = "bolt-reviews"
-application_url = "https://example.com"
+application_url = "https://bolt-reviews.onrender.com"
 embedded = true
 
 [build]
@@ -37,4 +37,4 @@ api_version = "2026-04"
 scopes = "write_products,read_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://bolt-reviews.onrender.com/api/auth" ]
