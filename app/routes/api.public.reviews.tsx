@@ -1,25 +1,57 @@
 import { type LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
+import {
+  addCorsHeaders,
+  handleCorsPreFlight,
+  checkRateLimit,
+  addRateLimitHeaders,
+} from "../utils/security.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return handleCorsPreFlight(request);
+  }
+
+  // Check rate limit
+  const rateLimit = checkRateLimit(request, {
+    windowMs: 60000,
+    maxRequests: 100,
+  });
+
+  if (rateLimit.limited) {
+    let response = new Response(
+      JSON.stringify({ error: "Too many requests. Please try again later." }),
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    response = addRateLimitHeaders(response, 0, rateLimit.resetAt, 100);
+    return addCorsHeaders(response, request);
+  }
+
   const url = new URL(request.url);
   const shopifyProductId = url.searchParams.get("productId");
   const rating = url.searchParams.get("rating");
   const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "10");
-
-  const corsHeaders = new Headers({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
-  });
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "10"), 50); // Max 50 per page
 
   if (!shopifyProductId) {
-    return new Response(JSON.stringify({ error: "Product ID is required" }), {
-      status: 400,
-      headers: corsHeaders,
-    });
+    let response = new Response(
+      JSON.stringify({ error: "Product ID is required" }),
+      {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    response = addRateLimitHeaders(
+      response,
+      rateLimit.remaining,
+      rateLimit.resetAt,
+      100,
+    );
+    return addCorsHeaders(response, request);
   }
 
   try {
@@ -39,7 +71,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     // If product doesn't exist, return empty reviews
     if (!product) {
-      return new Response(
+      let response = new Response(
         JSON.stringify({
           reviews: [],
           pagination: {
@@ -49,8 +81,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
             pages: 0,
           },
         }),
-        { headers: corsHeaders },
+        { headers: { "Content-Type": "application/json" } },
       );
+      response = addRateLimitHeaders(
+        response,
+        rateLimit.remaining,
+        rateLimit.resetAt,
+        100,
+      );
+      return addCorsHeaders(response, request);
     }
 
     const where: {
@@ -89,7 +128,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       prisma.review.count({ where }),
     ]);
 
-    return new Response(
+    let response = new Response(
       JSON.stringify({
         reviews,
         pagination: {
@@ -99,13 +138,30 @@ export async function loader({ request }: LoaderFunctionArgs) {
           pages: Math.ceil(total / limit),
         },
       }),
-      { headers: corsHeaders },
+      { headers: { "Content-Type": "application/json" } },
     );
+    response = addRateLimitHeaders(
+      response,
+      rateLimit.remaining,
+      rateLimit.resetAt,
+      100,
+    );
+    return addCorsHeaders(response, request);
   } catch (error) {
     console.error("Error fetching reviews:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch reviews" }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    let response = new Response(
+      JSON.stringify({ error: "Failed to fetch reviews" }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    response = addRateLimitHeaders(
+      response,
+      rateLimit.remaining,
+      rateLimit.resetAt,
+      100,
+    );
+    return addCorsHeaders(response, request);
   }
 }

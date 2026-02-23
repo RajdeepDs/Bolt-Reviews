@@ -3,7 +3,7 @@
   Allows customers to write and submit reviews for products
 {% endcomment %}
 
-<div class="review-form-wrapper" data-product-id="{{ product.id }}">
+<div class="review-form-container" data-product-id="{{ product.id }}" data-app-url="{{ shop.metafields.bolt_reviews.app_url.value | default: 'https://your-app.onrender.com' }}">
   <div class="review-form-header">
     <h3>Write a Review</h3>
     <p>Share your thoughts with other customers</p>
@@ -435,7 +435,9 @@
 <script>
   (function() {
     const form = document.getElementById('review-form');
-    const productId = document.querySelector('[data-product-id]')?.dataset.productId;
+    const formContainer = document.querySelector('.review-form-container');
+    const productId = formContainer?.dataset.productId;
+    const appUrl = formContainer?.dataset.appUrl || window.BOLT_REVIEWS_APP_URL || 'https://your-app.onrender.com';
     const starInputs = document.querySelectorAll('.star-rating-input input[type="radio"]');
     const ratingText = document.getElementById('rating-text');
     const charCount = document.getElementById('char-count');
@@ -555,7 +557,7 @@
           formData.append(`photo${index}`, file);
         });
 
-        const response = await fetch('https://climate-titten-sixth-bowl.trycloudflare.com/api/public/reviews/create', {
+        const response = await fetch(`${appUrl}/api/public/reviews/create`, {
           method: 'POST',
           body: formData
         });

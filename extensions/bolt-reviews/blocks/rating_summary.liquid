@@ -1,9 +1,9 @@
 {% comment %}
   Rating Summary Block
-  Displays aggregate rating statistics and distribution
+  Displays overall rating statistics and distribution
 {% endcomment %}
 
-<div class="rating-summary" data-product-id="{{ product.id }}">
+<div class="rating-summary" data-product-id="{{ product.id }}" data-app-url="{{ shop.metafields.bolt_reviews.app_url.value | default: 'https://your-app.onrender.com' }}">
   <div class="summary-loading">
     <div class="spinner"></div>
   </div>
@@ -284,7 +284,9 @@
 
 <script>
   (function() {
-    const productId = document.querySelector('[data-product-id]')?.dataset.productId;
+    const ratingSummaryEl = document.querySelector('.rating-summary');
+    const productId = ratingSummaryEl?.dataset.productId;
+    const appUrl = ratingSummaryEl?.dataset.appUrl || window.BOLT_REVIEWS_APP_URL || 'https://your-app.onrender.com';
     const summaryContent = document.getElementById('summary-content');
     const noRatings = document.getElementById('no-ratings');
     const loadingEl = document.querySelector('.summary-loading');
@@ -304,7 +306,7 @@
       }
 
       try {
-        const response = await fetch(`https://vinyl-boss-checklist-eligible.trycloudflare.com/api/public/reviews/summary?productId=${productId}`);
+        const response = await fetch(`${appUrl}/api/public/reviews/summary?productId=${productId}`);
         console.log('Summary response status:', response.status);
         if (!response.ok) throw new Error('Failed to fetch rating summary');
 
