@@ -60,6 +60,17 @@
       <div class="photos-grid"></div>
     </div>
 
+    <div class="merchant-reply" style="display: none;">
+      <div class="merchant-reply-header">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" style="color: #666;">
+          <path d="M12.666 4H3.333a1.334 1.334 0 0 0-1.333 1.333v6.667A1.334 1.334 0 0 0 3.333 13.333h8l2.667 2V5.333A1.334 1.334 0 0 0 12.666 4zm0 8l-1.333-1H3.333V5.333h9.333v6.667z"/>
+        </svg>
+        <span class="merchant-reply-title">Store Owner Reply</span>
+        <span class="merchant-reply-date"></span>
+      </div>
+      <p class="merchant-reply-text"></p>
+    </div>
+
     <div class="review-footer">
       <div class="review-helpful" style="display: none;">
         <span class="helpful-text">Was this helpful?</span>
@@ -130,6 +141,40 @@
     justify-content: space-between;
     align-items: flex-start;
     margin-bottom: 0.5rem;
+  }
+
+  .merchant-reply {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #fdfdfd;
+    border-left: 3px solid #333;
+    border-radius: 0 8px 8px 0;
+  }
+
+  .merchant-reply-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .merchant-reply-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #333;
+  }
+
+  .merchant-reply-date {
+    font-size: 0.75rem;
+    color: #888;
+    margin-left: auto;
+  }
+
+  .merchant-reply-text {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: #555;
+    margin: 0;
   }
 
   .review-author-info {
@@ -212,6 +257,97 @@
 
   .review-photo:hover {
     transform: scale(1.05);
+  }
+
+  /* Lightbox CSS */
+  .lightbox-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 999999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .lightbox-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .lightbox-content {
+    position: relative;
+    max-width: 90vw;
+    max-height: 90vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .lightbox-img {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: none;
+    border: none;
+    color: white;
+    font-size: 2rem;
+    cursor: pointer;
+    padding: 0.5rem;
+    line-height: 1;
+  }
+
+  .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background 0.2s;
+  }
+  
+  .lightbox-nav:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+
+  .lightbox-prev { left: -50px; }
+  .lightbox-next { right: -50px; }
+  .lightbox-counter {
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 0.875rem;
+  }
+
+  @media (max-width: 768px) {
+    .lightbox-prev { left: 10px; }
+    .lightbox-next { right: 10px; }
+    .lightbox-close { top: 10px; right: 10px; z-index: 10; }
   }
 
   .review-footer {
@@ -415,19 +551,32 @@
         }
 
         // Show photos
-        if (showPhotos && review.photos && review.photos.length > 0) {
+        const reviewImages = review.images?.length > 0 ? review.images : (review.imageUrl ? [review.imageUrl] : []);
+        
+        if (showPhotos && reviewImages.length > 0) {
           const photosContainer = reviewEl.querySelector('.review-photos');
           const photosGrid = reviewEl.querySelector('.photos-grid');
           photosContainer.style.display = 'block';
 
-          review.photos.forEach(photo => {
+          reviewImages.forEach((photoUrl, index) => {
             const img = document.createElement('img');
-            img.src = photo;
+            img.src = photoUrl;
             img.alt = 'Review photo';
             img.className = 'review-photo';
-            img.onclick = () => window.open(photo, '_blank');
+            img.onclick = () => openLightbox(reviewImages, index);
             photosGrid.appendChild(img);
           });
+        }
+
+        // Show merchant reply
+        if (review.merchantReply) {
+          const replyContainer = reviewEl.querySelector('.merchant-reply');
+          replyContainer.style.display = 'block';
+          reviewEl.querySelector('.merchant-reply-text').textContent = review.merchantReply;
+          
+          if (review.merchantReplyAt) {
+            reviewEl.querySelector('.merchant-reply-date').textContent = new Date(review.merchantReplyAt).toLocaleDateString();
+          }
         }
 
         // Show helpful buttons
@@ -506,6 +655,95 @@
         container.scrollIntoView({ behavior: 'smooth' });
       }
     });
+
+    // --- Lightbox Logic ---
+    let lightboxOverlay, lightboxImg, lightboxCounter;
+    let currentLightboxImages = [];
+    let currentLightboxIndex = 0;
+
+    function initLightbox() {
+      // Create HTML structure once globally
+      if(document.getElementById('reviews-lightbox')) return;
+      
+      const overlay = document.createElement('div');
+      overlay.id = 'reviews-lightbox';
+      overlay.className = 'lightbox-overlay';
+      overlay.innerHTML = `
+        <div class="lightbox-content">
+          <button class="lightbox-close">&times;</button>
+          <button class="lightbox-nav lightbox-prev">&#10094;</button>
+          <img class="lightbox-img" src="" alt="Review image fullscreen">
+          <button class="lightbox-nav lightbox-next">&#10095;</button>
+          <div class="lightbox-counter">1 / 1</div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      lightboxOverlay = overlay;
+      lightboxImg = overlay.querySelector('.lightbox-img');
+      lightboxCounter = overlay.querySelector('.lightbox-counter');
+      
+      const closeBtn = overlay.querySelector('.lightbox-close');
+      const prevBtn = overlay.querySelector('.lightbox-prev');
+      const nextBtn = overlay.querySelector('.lightbox-next');
+
+      closeBtn.onclick = closeLightbox;
+      overlay.onclick = (e) => {
+        if(e.target === overlay || e.target.classList.contains('lightbox-content')) {
+          closeLightbox();
+        }
+      };
+      
+      prevBtn.onclick = (e) => { e.stopPropagation(); navigateLightbox(-1); };
+      nextBtn.onclick = (e) => { e.stopPropagation(); navigateLightbox(1); };
+
+      document.addEventListener('keydown', (e) => {
+        if(!lightboxOverlay.classList.contains('active')) return;
+        if(e.key === 'Escape') closeLightbox();
+        if(e.key === 'ArrowLeft') navigateLightbox(-1);
+        if(e.key === 'ArrowRight') navigateLightbox(1);
+      });
+    }
+
+    window.openLightbox = function(images, index) {
+      if(!lightboxOverlay) initLightbox();
+      currentLightboxImages = images;
+      currentLightboxIndex = index;
+      updateLightboxImage();
+      lightboxOverlay.classList.add('active');
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+      
+      const prevBtn = lightboxOverlay.querySelector('.lightbox-prev');
+      const nextBtn = lightboxOverlay.querySelector('.lightbox-next');
+      if (images.length <= 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        lightboxCounter.style.display = 'none';
+      } else {
+        prevBtn.style.display = 'flex';
+        nextBtn.style.display = 'flex';
+        lightboxCounter.style.display = 'block';
+      }
+    };
+
+    function updateLightboxImage() {
+      lightboxImg.src = currentLightboxImages[currentLightboxIndex];
+      lightboxCounter.textContent = \`\${currentLightboxIndex + 1} / \${currentLightboxImages.length}\`;
+    }
+
+    function navigateLightbox(direction) {
+      currentLightboxIndex += direction;
+      if(currentLightboxIndex < 0) currentLightboxIndex = currentLightboxImages.length - 1;
+      if(currentLightboxIndex >= currentLightboxImages.length) currentLightboxIndex = 0;
+      updateLightboxImage();
+    }
+
+    function closeLightbox() {
+      if(lightboxOverlay) {
+        lightboxOverlay.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+    }
 
     if (productId) {
       fetchReviews();

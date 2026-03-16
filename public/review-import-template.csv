@@ -1,0 +1,6 @@
+Product Handle,Customer Name,Rating,Review Title,Review Content,Customer Email,Status,Verified Purchase,Helpful Votes,Not Helpful Votes,Image URL
+short-t-shirt,John Smith,5,Amazing product!,This is the best t-shirt I've ever purchased. The quality is outstanding and it fits perfectly.,john@example.com,published,Yes,10,0,
+short-t-shirt,Sarah Johnson,4,Great quality,Really happy with this purchase. The fabric is soft and comfortable.,sarah@example.com,published,Yes,5,0,
+short-t-shirt,Mike Brown,5,Highly recommend,Excellent product! Will definitely buy again.,mike@example.com,published,No,8,1,
+short-t-shirt,Emma Wilson,3,Good but could be better,It's decent but the sizing is a bit off. Otherwise good quality.,emma@example.com,published,Yes,3,2,
+short-t-shirt,David Lee,5,Perfect!,Exactly what I was looking for. Love it!,david@example.com,published,Yes,15,0,

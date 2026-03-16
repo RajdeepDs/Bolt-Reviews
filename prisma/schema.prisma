@@ -41,7 +41,8 @@ model Product {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  reviews Review[]
+  reviews   Review[]
+  questions Question[]
 
   @@unique([shopId, shopifyProductId])
   @@index([shopId])
@@ -49,21 +50,46 @@ model Product {
 }
 
 model Review {
-  id            String   @id @default(cuid())
-  productId     String
-  shopId        String
-  customerName  String
-  customerEmail String?
-  rating        Int
-  title         String
-  content       String   @db.Text
-  status        String   @default("pending") // "pending", "published", "rejected"
-  isVerified    Boolean  @default(false)
-  helpful       Int      @default(0)
-  notHelpful    Int      @default(0)
-  imageUrl      String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id              String    @id @default(cuid())
+  productId       String
+  shopId          String
+  customerName    String
+  customerEmail   String?
+  rating          Int
+  title           String
+  content         String    @db.Text
+  status          String    @default("pending") // "pending", "published", "rejected"
+  isVerified      Boolean   @default(false)
+  helpful         Int       @default(0)
+  notHelpful      Int       @default(0)
+  imageUrl        String?
+  images          String[]  @default([])
+  merchantReply   String?   @db.Text
+  merchantReplyAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([shopId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([shopId, productId, customerEmail])
+}
+
+model Question {
+  id              String    @id @default(cuid())
+  productId       String
+  shopId          String
+  askerName       String
+  askerEmail      String?
+  content         String    @db.Text
+  status          String    @default("pending") // "pending", "published", "rejected"
+  merchantAnswer  String?   @db.Text
+  answeredAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 

@@ -345,6 +345,37 @@
       if (distributionEl) {
         displayDistribution(data.distribution, data.totalReviews);
       }
+
+      // Inject SEO structured data (JSON-LD)
+      injectStructuredData(data);
+    }
+
+    function injectStructuredData(data) {
+      if (!data.totalReviews || data.totalReviews === 0) return;
+
+      // Check if we already injected it
+      if (document.getElementById('bolt-reviews-json-ld')) return;
+
+      const script = document.createElement('script');
+      script.id = 'bolt-reviews-json-ld';
+      script.setAttribute('type', 'application/ld+json');
+
+      const jsonLd = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "{{ product.title | escape }}",
+        "image": "{{ product.featured_image | img_url: 'large' }}",
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": data.averageRating.toFixed(1),
+          "reviewCount": data.totalReviews,
+          "bestRating": "5",
+          "worstRating": "1"
+        }
+      };
+
+      script.textContent = JSON.stringify(jsonLd);
+      document.head.appendChild(script);
     }
 
     function renderStars(rating) {

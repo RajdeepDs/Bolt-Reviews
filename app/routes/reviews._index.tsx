@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   HeadersFunction,
   LoaderFunctionArgs,
@@ -9,10 +9,15 @@ import {
   useSubmit,
   useNavigation,
   useFetcher,
+  useSearchParams,
+  useRevalidator,
 } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import { updateProductStats } from "../utils/product-stats.server";
+
+const REVIEWS_PER_PAGE = 25;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -20,34 +25,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const status = url.searchParams.get("status") || "all";
   const search = url.searchParams.get("search") || "";
-  const rating = url.searchParams.get("rating");
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+  const sort = url.searchParams.get("sort") || "newest";
+  const productId = url.searchParams.get("productId") || "";
 
   // Build where clause
-  const where: {
-    shopId: string;
-    status?: string;
-    rating?: { lte: number } | number;
-    OR?: Array<{
-      customerName?: { contains: string; mode: "insensitive" };
-      title?: { contains: string; mode: "insensitive" };
-      content?: { contains: string; mode: "insensitive" };
-    }>;
-  } = {
+  const where: any = {
     shopId: session.shop,
   };
 
   // Filter by status
-  if (status !== "all") {
-    where.status = status;
+  if (status === "pending") {
+    where.status = "pending";
+  } else if (status === "published") {
+    where.status = "published";
+  } else if (status === "low") {
+    where.rating = { lte: 3 };
   }
 
-  // Filter by rating
-  if (rating) {
-    if (rating === "low") {
-      where.rating = { lte: 2 };
-    } else {
-      where.rating = parseInt(rating);
-    }
+  // Filter by product
+  if (productId) {
+    where.productId = productId;
   }
 
   // Search functionality
@@ -59,8 +57,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ];
   }
 
-  // Get reviews
-  const [reviews, statusCounts] = await Promise.all([
+  // Sort mapping
+  let orderBy: any = { createdAt: "desc" };
+  switch (sort) {
+    case "oldest":
+      orderBy = { createdAt: "asc" };
+      break;
+    case "rating-high":
+      orderBy = { rating: "desc" };
+      break;
+    case "rating-low":
+      orderBy = { rating: "asc" };
+      break;
+    default:
+      orderBy = { createdAt: "desc" };
+  }
+
+  // Get product name for filter chip
+  let filterProductName: string | null = null;
+  if (productId) {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { title: true },
+    });
+    filterProductName = product?.title || null;
+  }
+
+  // Get reviews with pagination + total counts
+  const [reviews, totalFiltered, statusCounts] = await Promise.all([
     prisma.review.findMany({
       where,
       include: {
@@ -69,14 +93,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             id: true,
             title: true,
             handle: true,
+            imageUrl: true,
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
-      take: 100,
+      orderBy,
+      skip: (page - 1) * REVIEWS_PER_PAGE,
+      take: REVIEWS_PER_PAGE,
     }),
+    prisma.review.count({ where }),
     prisma.review.groupBy({
       by: ["status"],
       where: {
@@ -89,7 +114,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   const counts = {
-    all: reviews.length,
+    all: 0,
     pending: 0,
     published: 0,
     rejected: 0,
@@ -102,8 +127,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       if (item.status === "rejected") counts.rejected = item._count.status;
     },
   );
+  counts.all = counts.pending + counts.published + counts.rejected;
 
-  return { reviews, counts };
+  return {
+    reviews,
+    counts,
+    totalFiltered,
+    page,
+    totalPages: Math.ceil(totalFiltered / REVIEWS_PER_PAGE),
+    filterProductName,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -142,7 +175,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
 
-        break;
+        return { success: true, message: `Published ${ids.length} review(s)` };
 
       case "unpublish":
         {
@@ -160,7 +193,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
           const unpublishProductIds = [
             ...new Set(
-              unpublishedReviews.map((r: { productId: string }) => r.productId),
+              unpublishedReviews.map(
+                (r: { productId: string }) => r.productId,
+              ),
             ),
           ];
 
@@ -168,7 +203,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             await updateProductStats(productId);
           }
         }
-        break;
+        return {
+          success: true,
+          message: `Unpublished ${ids.length} review(s)`,
+        };
 
       case "delete":
         {
@@ -196,7 +234,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             await updateProductStats(productId);
           }
         }
-        break;
+        return { success: true, message: `Deleted ${ids.length} review(s)` };
     }
 
     return { success: true };
@@ -205,29 +243,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { success: false, error: (error as Error).message };
   }
 };
-
-async function updateProductStats(productId: string) {
-  const stats = await prisma.review.aggregate({
-    where: {
-      productId,
-      status: "published",
-    },
-    _avg: {
-      rating: true,
-    },
-    _count: {
-      id: true,
-    },
-  });
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: {
-      averageRating: stats._avg.rating || 0,
-      reviewCount: stats._count.id,
-    },
-  });
-}
 
 function formatDate(dateString: string) {
   const date = new Date(dateString);
@@ -249,43 +264,89 @@ function formatDate(dateString: string) {
 }
 
 export default function ReviewsIndex() {
-  const { reviews, counts } = useLoaderData<typeof loader>();
+  const { reviews, counts, totalFiltered, page, totalPages, filterProductName } =
+    useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const fetcher = useFetcher();
+  const updateFetcher = useFetcher();
+  const replyFetcher = useFetcher();
+  const revalidator = useRevalidator();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isSubmitting = navigation.state === "submitting";
+  const isLoading = navigation.state === "loading";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
-  const [filter, setFilter] = useState<"all" | "low" | "pending">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("search") || "",
+  );
   const [isImporting, setIsImporting] = useState(false);
 
-  // Client-side filtering
-  const filteredReviews = reviews.filter((review) => {
-    let matchesFilter = true;
-    if (filter === "low") matchesFilter = review.rating <= 3;
-    if (filter === "pending") matchesFilter = review.status === "pending";
-
-    const matchesSearch =
-      searchQuery === "" ||
-      review.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      review.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      review.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      review.product.title.toLowerCase().includes(searchQuery.toLowerCase());
-
-    return matchesFilter && matchesSearch;
+  // Review detail modal state
+  const [selectedReview, setSelectedReview] = useState<
+    (typeof reviews)[0] | null
+  >(null);
+  const [replyText, setReplyText] = useState("");
+  const [editForm, setEditForm] = useState({
+    title: "",
+    content: "",
+    rating: 0,
+    status: "",
+    customerName: "",
+    customerEmail: "",
   });
+
+  // Get current filter from URL
+  const currentFilter = searchParams.get("status") || "all";
+
+  // Update filter via URL params
+  const setFilter = useCallback(
+    (status: string) => {
+      const params = new URLSearchParams(searchParams);
+      params.set("status", status);
+      params.delete("page"); // Reset to page 1
+      setSearchParams(params);
+      setSelectedReviews([]);
+    },
+    [searchParams, setSearchParams],
+  );
+
+  // Handle search debounce
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams);
+      if (value) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      params.delete("page");
+      setSearchParams(params);
+    }, 400);
+  };
+
+  // Pagination
+  const goToPage = (newPage: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("page", String(newPage));
+    setSearchParams(params);
+    setSelectedReviews([]);
+  };
 
   const toggleSelectAll = (e: any) => {
     e?.preventDefault?.();
     if (
-      selectedReviews.length === filteredReviews.length &&
-      filteredReviews.length > 0
+      selectedReviews.length === reviews.length &&
+      reviews.length > 0
     ) {
       setSelectedReviews([]);
     } else {
-      setSelectedReviews(filteredReviews.map((r) => r.id));
+      setSelectedReviews(reviews.map((r) => r.id));
     }
   };
 
@@ -308,6 +369,24 @@ export default function ReviewsIndex() {
     setSelectedReviews([]);
   };
 
+  // Show toast after bulk actions complete
+  const prevNavigationState = useRef(navigation.state);
+  useEffect(() => {
+    if (
+      prevNavigationState.current === "submitting" &&
+      navigation.state === "idle"
+    ) {
+      const shopify = (window as any).shopify;
+      const data = navigation.formData
+        ? undefined
+        : (undefined as any); // action data is in the loader revalidation
+      if (shopify?.toast?.show) {
+        shopify.toast.show("Action completed successfully");
+      }
+    }
+    prevNavigationState.current = navigation.state;
+  }, [navigation.state]);
+
   // Count how many selected reviews are pending
   const selectedPendingCount = selectedReviews.filter((id) => {
     const review = reviews.find((r) => r.id === id);
@@ -320,20 +399,11 @@ export default function ReviewsIndex() {
     return review?.status === "published";
   }).length;
 
-  // Clear selection when submitting completes
-  useEffect(() => {
-    if (!isSubmitting) {
-      // Don't clear automatically - let user control it
-    }
-  }, [isSubmitting]);
-
   const handleExport = () => {
     window.open("/api/reviews/export", "_blank");
     const shopify = (window as any).shopify;
     if (shopify?.toast?.show) {
       shopify.toast.show("Exporting reviews...");
-    } else {
-      console.log("Exporting reviews...");
     }
   };
 
@@ -363,7 +433,7 @@ export default function ReviewsIndex() {
     }
   };
 
-  // Handle import completion
+  // Handle import completion — use revalidator instead of window.location.reload
   useEffect(() => {
     if (isImporting && fetcher.state === "idle" && fetcher.data) {
       setIsImporting(false);
@@ -378,15 +448,130 @@ export default function ReviewsIndex() {
         if (shopify?.toast?.show) {
           shopify.toast.show(data.message || "Reviews imported successfully");
         }
-        // Reload the page to show new reviews
-        window.location.reload();
+        revalidator.revalidate();
       } else {
         if (shopify?.toast?.show) {
           shopify.toast.show(data.error || "Import failed", { isError: true });
         }
       }
     }
-  }, [isImporting, fetcher.state, fetcher.data]);
+  }, [isImporting, fetcher.state, fetcher.data, revalidator]);
+
+  // --- Review Detail Modal ---
+  const openReviewDetail = (review: (typeof reviews)[0]) => {
+    setSelectedReview(review);
+    setReplyText(review.merchantReply || "");
+    setEditForm({
+      title: review.title,
+      content: review.content,
+      rating: review.rating,
+      status: review.status,
+      customerName: review.customerName,
+      customerEmail: review.customerEmail || "",
+    });
+  };
+
+  const closeReviewDetail = () => {
+    setSelectedReview(null);
+  };
+
+  const handleSaveReply = () => {
+    if (!selectedReview) return;
+
+    replyFetcher.submit(
+      JSON.stringify({ reply: replyText }),
+      {
+        method: "POST",
+        action: `/api/reviews/${selectedReview.id}/reply`,
+        encType: "application/json",
+      },
+    );
+  };
+
+  // Handle reply completion
+  useEffect(() => {
+    if (replyFetcher.state === "idle" && replyFetcher.data) {
+      const data = replyFetcher.data as { success?: boolean; error?: string };
+      const shopify = (window as any).shopify;
+
+      if (data.success) {
+        if (shopify?.toast?.show) {
+          shopify.toast.show("Reply saved successfully");
+        }
+        revalidator.revalidate();
+      } else {
+        if (shopify?.toast?.show) {
+          shopify.toast.show(data.error || "Failed to save reply", { isError: true });
+        }
+      }
+    }
+  }, [replyFetcher.state, replyFetcher.data, revalidator]);
+
+  // Product filter clear
+  const clearProductFilter = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("productId");
+    params.delete("page");
+    setSearchParams(params);
+  };
+
+  // Sort handler
+  const handleSortChange = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("sort", value);
+    params.delete("page");
+    setSearchParams(params);
+  };
+
+  const handleSaveReview = () => {
+    if (!selectedReview) return;
+
+    updateFetcher.submit(
+      JSON.stringify({
+        customerName: editForm.customerName,
+        customerEmail: editForm.customerEmail || null,
+        rating: editForm.rating,
+        title: editForm.title,
+        content: editForm.content,
+        status: editForm.status,
+      }),
+      {
+        method: "PATCH",
+        action: `/api/reviews/${selectedReview.id}/update`,
+        encType: "application/json",
+      },
+    );
+  };
+
+  // Handle update completion
+  useEffect(() => {
+    if (updateFetcher.state === "idle" && updateFetcher.data) {
+      const data = updateFetcher.data as {
+        success?: boolean;
+        message?: string;
+        error?: string;
+      };
+      const shopify = (window as any).shopify;
+
+      if (data.success) {
+        if (shopify?.toast?.show) {
+          shopify.toast.show("Review updated successfully");
+        }
+        closeReviewDetail();
+        revalidator.revalidate();
+      } else {
+        if (shopify?.toast?.show) {
+          shopify.toast.show(data.error || "Failed to update review", {
+            isError: true,
+          });
+        }
+      }
+    }
+  }, [updateFetcher.state, updateFetcher.data, revalidator]);
+
+  // Pagination info
+  const startItem = (page - 1) * REVIEWS_PER_PAGE + 1;
+  const endItem = Math.min(page * REVIEWS_PER_PAGE, totalFiltered);
 
   return (
     <s-page heading="My Reviews" inlineSize="base">
@@ -446,46 +631,67 @@ export default function ReviewsIndex() {
           )}
         </>
       )}
+      {/* Product filter chip */}
+      {filterProductName && (
+        <s-section padding="none">
+          <s-box padding="base">
+            <s-stack direction="inline" gap="small" alignItems="center">
+              <s-text>Filtered by product:</s-text>
+              <s-badge tone="info">
+                {filterProductName}
+              </s-badge>
+              <s-button variant="tertiary" onClick={clearProductFilter}>
+                ✕ Clear filter
+              </s-button>
+            </s-stack>
+          </s-box>
+        </s-section>
+      )}
+
       <s-section padding="none">
-        {/* FILTER BUTTONS */}
+        {/* FILTER BUTTONS + SORT */}
         <s-table>
-          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
+          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto auto 1fr">
             <s-stack direction="inline">
               <s-button
-                variant={filter === "all" ? "secondary" : "tertiary"}
-                onClick={() => {
-                  setFilter("all");
-                  setSelectedReviews([]);
-                }}
+                variant={currentFilter === "all" ? "secondary" : "tertiary"}
+                onClick={() => setFilter("all")}
               >
                 All ({counts.all})
               </s-button>
               <s-button
-                variant={filter === "low" ? "secondary" : "tertiary"}
-                onClick={() => {
-                  setFilter("low");
-                  setSelectedReviews([]);
-                }}
+                variant={currentFilter === "low" ? "secondary" : "tertiary"}
+                onClick={() => setFilter("low")}
               >
                 Low ratings (≤3★)
               </s-button>
               <s-button
-                variant={filter === "pending" ? "secondary" : "tertiary"}
-                onClick={() => {
-                  setFilter("pending");
-                  setSelectedReviews([]);
-                }}
+                variant={
+                  currentFilter === "pending" ? "secondary" : "tertiary"
+                }
+                onClick={() => setFilter("pending")}
               >
                 Pending ({counts.pending})
               </s-button>
             </s-stack>
+            <s-select
+              label="Sort by"
+              labelAccessibilityVisibility="exclusive"
+              value={searchParams.get("sort") || "newest"}
+              onInput={(e: any) => handleSortChange(e.target.value)}
+            >
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="rating-high">Rating: high to low</option>
+              <option value="rating-low">Rating: low to high</option>
+            </s-select>
             <s-text-field
               label="Search reviews"
               labelAccessibilityVisibility="exclusive"
               icon="search"
               placeholder="Search all reviews"
               value={searchQuery}
-              onInput={(e: any) => setSearchQuery(e.target?.value || "")}
+              onInput={(e: any) => handleSearchChange(e.target?.value || "")}
             />
           </s-grid>
           {/* TABLE HEADER */}
@@ -493,8 +699,8 @@ export default function ReviewsIndex() {
             <s-table-header>
               <s-checkbox
                 checked={
-                  selectedReviews.length === filteredReviews.length &&
-                  filteredReviews.length > 0
+                  selectedReviews.length === reviews.length &&
+                  reviews.length > 0
                 }
                 onInput={toggleSelectAll}
               />
@@ -509,12 +715,20 @@ export default function ReviewsIndex() {
 
           {/* TABLE BODY */}
           <s-table-body>
-            {filteredReviews.length === 0 ? (
+            {isLoading ? (
+              <s-table-row>
+                <s-table-cell>
+                  <s-box padding="large">
+                    <s-text>Loading reviews...</s-text>
+                  </s-box>
+                </s-table-cell>
+              </s-table-row>
+            ) : reviews.length === 0 ? (
               <s-table-row>
                 <s-table-cell>
                   <s-box padding="large">
                     <s-text>
-                      {searchQuery || filter !== "all"
+                      {searchQuery || currentFilter !== "all"
                         ? "No reviews found matching your filters"
                         : "No reviews yet. Reviews will appear here once customers start leaving feedback."}
                     </s-text>
@@ -522,7 +736,7 @@ export default function ReviewsIndex() {
                 </s-table-cell>
               </s-table-row>
             ) : (
-              filteredReviews.map((review) => (
+              reviews.map((review) => (
                 <s-table-row key={review.id}>
                   {/* CHECKBOX */}
                   <s-table-cell>
@@ -534,7 +748,14 @@ export default function ReviewsIndex() {
 
                   {/* CUSTOMER */}
                   <s-table-cell>
-                    <s-text>{review.customerName}</s-text>
+                    <s-link
+                      onClick={(e: any) => {
+                        e.preventDefault();
+                        openReviewDetail(review);
+                      }}
+                    >
+                      {review.customerName}
+                    </s-link>
                   </s-table-cell>
 
                   {/* TITLE */}
@@ -551,7 +772,16 @@ export default function ReviewsIndex() {
 
                   {/* PRODUCT */}
                   <s-table-cell>
-                    <s-text>{review.product.title}</s-text>
+                    <s-stack direction="inline" gap="small" alignItems="center">
+                      {review.product.imageUrl && (
+                        <s-thumbnail
+                          src={review.product.imageUrl}
+                          alt={review.product.title}
+                          size="small"
+                        />
+                      )}
+                      <s-text>{review.product.title}</s-text>
+                    </s-stack>
                   </s-table-cell>
 
                   {/* DATE */}
@@ -579,7 +809,319 @@ export default function ReviewsIndex() {
             )}
           </s-table-body>
         </s-table>
+
+        {/* PAGINATION */}
+        {totalPages > 1 && (
+          <s-box padding="base">
+            <s-stack
+              direction="inline"
+              gap="base"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <s-text color="subdued">
+                Showing {startItem}–{endItem} of {totalFiltered} reviews
+              </s-text>
+              <s-stack direction="inline" gap="small">
+                <s-button
+                  variant="tertiary"
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1}
+                >
+                  ← Previous
+                </s-button>
+                <s-text>
+                  Page {page} of {totalPages}
+                </s-text>
+                <s-button
+                  variant="tertiary"
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  Next →
+                </s-button>
+              </s-stack>
+            </s-stack>
+          </s-box>
+        )}
       </s-section>
+
+      {/* REVIEW DETAIL MODAL */}
+      {selectedReview && (
+        <s-modal
+          id="review-detail-modal"
+          // @ts-expect-error Shopify web component supports open attribute
+          open
+          onClose={closeReviewDetail}
+          variant="base"
+        >
+          <s-text slot="title">Review Details</s-text>
+
+          <s-box padding="base">
+            <s-stack gap="large">
+              {/* Review images */}
+              {(selectedReview.images?.length > 0 || selectedReview.imageUrl) && (
+                <s-box>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {selectedReview.images?.length > 0
+                      ? selectedReview.images.map((img: string, i: number) => (
+                          <img
+                            key={i}
+                            src={img}
+                            alt={`Review image ${i + 1}`}
+                            style={{
+                              width: "120px",
+                              height: "120px",
+                              borderRadius: "8px",
+                              objectFit: "cover",
+                              border: "1px solid var(--s-color-border)",
+                            }}
+                            onClick={() => window.open(img, "_blank")}
+                          />
+                        ))
+                      : selectedReview.imageUrl && (
+                          <img
+                            src={selectedReview.imageUrl}
+                            alt="Review image"
+                            style={{
+                              width: "120px",
+                              height: "120px",
+                              borderRadius: "8px",
+                              objectFit: "cover",
+                              border: "1px solid var(--s-color-border)",
+                            }}
+                            onClick={() => window.open(selectedReview.imageUrl!, "_blank")}
+                          />
+                        )}
+                  </div>
+                </s-box>
+              )}
+
+              {/* Product info */}
+              <s-stack direction="inline" gap="small" alignItems="center">
+                {selectedReview.product.imageUrl && (
+                  <s-thumbnail
+                    src={selectedReview.product.imageUrl}
+                    alt={selectedReview.product.title}
+                    size="small"
+                  />
+                )}
+                <s-stack gap="none">
+                  <s-text>
+                    <strong>{selectedReview.product.title}</strong>
+                  </s-text>
+                  <s-text color="subdued">
+                    Submitted {formatDate(selectedReview.createdAt.toString())}
+                  </s-text>
+                </s-stack>
+              </s-stack>
+
+              <s-divider />
+
+              {/* Customer Name */}
+              <s-text-field
+                label="Customer Name"
+                value={editForm.customerName}
+                onInput={(e: any) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    customerName: e.target.value,
+                  }))
+                }
+              />
+
+              {/* Customer Email */}
+              <s-text-field
+                label="Customer Email"
+                value={editForm.customerEmail}
+                placeholder="No email provided"
+                onInput={(e: any) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    customerEmail: e.target.value,
+                  }))
+                }
+              />
+
+              {/* Rating */}
+              <s-stack gap="small">
+                <s-text><strong>Rating</strong></s-text>
+                <s-select
+                  label="Rating"
+                  labelAccessibilityVisibility="exclusive"
+                  value={String(editForm.rating)}
+                  onInput={(e: any) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      rating: parseInt(e.target.value),
+                    }))
+                  }
+                >
+                  <option value="5">⭐⭐⭐⭐⭐ (5 stars)</option>
+                  <option value="4">⭐⭐⭐⭐ (4 stars)</option>
+                  <option value="3">⭐⭐⭐ (3 stars)</option>
+                  <option value="2">⭐⭐ (2 stars)</option>
+                  <option value="1">⭐ (1 star)</option>
+                </s-select>
+              </s-stack>
+
+              {/* Status */}
+              <s-stack gap="small">
+                <s-text><strong>Status</strong></s-text>
+                <s-select
+                  label="Status"
+                  labelAccessibilityVisibility="exclusive"
+                  value={editForm.status}
+                  onInput={(e: any) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      status: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="pending">Pending</option>
+                  <option value="published">Published</option>
+                  <option value="rejected">Rejected</option>
+                </s-select>
+              </s-stack>
+
+              {/* Title */}
+              <s-text-field
+                label="Review Title"
+                value={editForm.title}
+                onInput={(e: any) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+              />
+
+              {/* Content */}
+              <s-stack gap="small">
+                <s-text><strong>Review Content</strong></s-text>
+                <textarea
+                  value={editForm.content}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      content: e.target.value,
+                    }))
+                  }
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--s-color-border, #ccc)",
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    resize: "vertical",
+                  }}
+                />
+              </s-stack>
+
+              {/* Verified badge */}
+              {selectedReview.isVerified && (
+                <s-badge tone="info">✓ Verified Purchase</s-badge>
+              )}
+
+              {/* Helpful counts */}
+              <s-stack direction="inline" gap="base">
+                <s-text color="subdued">
+                  👍 {selectedReview.helpful} helpful
+                </s-text>
+                <s-text color="subdued">
+                  👎 {selectedReview.notHelpful} not helpful
+                </s-text>
+              </s-stack>
+
+              <s-divider />
+
+              {/* Merchant Reply */}
+              <s-stack gap="small">
+                <s-text><strong>Merchant Reply</strong></s-text>
+                <textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  rows={3}
+                  placeholder="Write a reply to this review..."
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--s-color-border, #ccc)",
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    resize: "vertical",
+                  }}
+                />
+                <s-stack direction="inline" gap="small">
+                  <s-button
+                    variant="secondary"
+                    onClick={handleSaveReply}
+                    disabled={replyFetcher.state !== "idle"}
+                  >
+                    {replyFetcher.state !== "idle"
+                      ? "Saving reply..."
+                      : selectedReview.merchantReply
+                        ? "Update Reply"
+                        : "Save Reply"}
+                  </s-button>
+                  {replyText && (
+                    <s-button
+                      variant="tertiary"
+                      onClick={() => {
+                        setReplyText("");
+                        handleSaveReply();
+                      }}
+                    >
+                      Remove Reply
+                    </s-button>
+                  )}
+                </s-stack>
+                {selectedReview.merchantReplyAt && (
+                  <s-text color="subdued">
+                    Last replied: {formatDate(selectedReview.merchantReplyAt.toString())}
+                  </s-text>
+                )}
+              </s-stack>
+            </s-stack>
+          </s-box>
+
+          <s-box slot="footer" padding="base">
+            <s-stack
+              direction="inline"
+              gap="base"
+              justifyContent="space-between"
+            >
+              <s-button variant="tertiary" onClick={closeReviewDetail}>
+                Cancel
+              </s-button>
+              <s-button
+                variant="primary"
+                onClick={handleSaveReview}
+                disabled={updateFetcher.state !== "idle"}
+              >
+                {updateFetcher.state !== "idle" ? "Saving..." : "Save Changes"}
+              </s-button>
+            </s-stack>
+          </s-box>
+        </s-modal>
+      )}
+    </s-page>
+  );
+}
+
+export function ErrorBoundary() {
+  return (
+    <s-page title="Reviews">
+      <s-box padding="400" background="white" border="1px solid #dfe3e8" borderRadius="200">
+        <s-text variant="headingLg" color="critical">Error rendering Reviews</s-text>
+        <div style={{ marginTop: '16px' }}>
+          <p>An unexpected error occurred while loading the reviews dashboard. Please try refreshing.</p>
+        </div>
+      </s-box>
     </s-page>
   );
 }

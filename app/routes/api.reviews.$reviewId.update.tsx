@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { updateProductStats } from "../utils/product-stats.server";
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (request.method !== "PATCH" && request.method !== "PUT") {
@@ -104,26 +105,4 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 };
 
-// Helper function to update product review stats
-async function updateProductStats(productId: string) {
-  const stats = await prisma.review.aggregate({
-    where: {
-      productId,
-      status: "published",
-    },
-    _avg: {
-      rating: true,
-    },
-    _count: {
-      id: true,
-    },
-  });
 
-  await prisma.product.update({
-    where: { id: productId },
-    data: {
-      averageRating: stats._avg.rating || 0,
-      reviewCount: stats._count.id,
-    },
-  });
-}

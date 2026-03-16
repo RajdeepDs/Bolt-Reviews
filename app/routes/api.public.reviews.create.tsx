@@ -1,5 +1,9 @@
 import { type ActionFunctionArgs } from "react-router";
 import prisma from "../db.server";
+import { updateProductStats } from "../utils/product-stats.server";
+import { unauthenticated } from "../shopify.server";
+import { Filter } from "bad-words";
+import { sendEmail } from "../utils/email.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   const corsHeaders = {
@@ -23,7 +27,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const content = formData.get("content") as string;
     const customerName = formData.get("customerName") as string;
     const customerEmail = formData.get("customerEmail") as string;
-    const isVerified = formData.get("verified") === "true";
+    let isVerified = formData.get("verified") === "true";
 
     if (!shopifyProductId || !rating || !title || !content || !customerName) {
       return Response.json(
@@ -44,6 +48,8 @@ export async function action({ request }: ActionFunctionArgs) {
       select: {
         id: true,
         shopId: true,
+        shopifyProductId: true,
+        title: true,
       },
     });
 
@@ -54,15 +60,114 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Handle image upload
+    // Handle multiple image uploads (up to 5)
     let imageUrl: string | null = null;
+    const images: string[] = [];
+    
     for (const [key, value] of formData.entries()) {
       if (key.startsWith("photo") && value instanceof File && value.size > 0) {
+        if (images.length >= 5) break; // Limit to 5 images
+        
         const buffer = await value.arrayBuffer();
         const base64 = Buffer.from(buffer).toString("base64");
         const dataUrl = `data:${value.type};base64,${base64}`;
-        imageUrl = dataUrl;
-        break; // Only take the first photo for now
+        
+        images.push(dataUrl);
+        if (!imageUrl) imageUrl = dataUrl; // Set first image as primary
+      }
+    }
+
+    // Determine review status based on shop settings
+    const settings = await prisma.settings.findUnique({
+      where: { shopId: product.shopId },
+    });
+
+    let status = "pending"; // Default: require moderation
+
+    // Spam & Profanity Auto-Moderation
+    const filter = new Filter();
+    const isSpam = filter.isProfane(title) || filter.isProfane(content);
+
+    if (isSpam) {
+      status = "rejected";
+      console.log(`Auto-rejected review for profanity: ${customerEmail || customerName}`);
+    } else if (settings?.autoPublish) {
+      if (rating >= (settings.minRatingToPublish || 1)) {
+        status = "published";
+      }
+    }
+
+    // Duplicate review prevention
+    if (customerEmail) {
+      const existingReview = await prisma.review.findFirst({
+        where: {
+          shopId: product.shopId,
+          productId: product.id,
+          customerEmail: customerEmail,
+        },
+      });
+
+      if (existingReview) {
+        return Response.json(
+          { error: "You have already reviewed this product" },
+          { status: 409, headers: corsHeaders },
+        );
+      }
+
+      // Verified Purchase Auto-Detection
+      if (!isVerified) {
+        try {
+          const { admin } = await unauthenticated.admin(product.shopId);
+          // Query recent orders for this email
+          const query = `
+            query CheckCustomerOrders($query: String!) {
+              orders(first: 10, query: $query) {
+                edges {
+                  node {
+                    lineItems(first: 50) {
+                      edges {
+                        node {
+                          product {
+                            id
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `;
+          const response = await admin.graphql(query, { 
+            variables: { query: `email:${customerEmail}` }
+          });
+          const data = await response.json();
+          
+          let foundPurchase = false;
+          const orders = data?.data?.orders?.edges || [];
+          
+          for (const orderEdge of orders) {
+            const lineItems = orderEdge.node?.lineItems?.edges || [];
+            for (const itemEdge of lineItems) {
+              const orderedProductId = itemEdge.node?.product?.id;
+              if (orderedProductId) {
+                // shopifyProductId might be standard or GID format, check both
+                if (orderedProductId === product.shopifyProductId || product.shopifyProductId.endsWith(orderedProductId.split('/').pop() || '')) {
+                  foundPurchase = true;
+                  break;
+                }
+              }
+            }
+            if (foundPurchase) break;
+          }
+          
+          if (foundPurchase) {
+            isVerified = true;
+            console.log(`Auto-verified purchase for ${customerEmail} on product ${product.id}`);
+          }
+        } catch (error) {
+          console.error("Failed to auto-verify purchase:", error);
+        }
       }
     }
 
@@ -78,40 +183,50 @@ export async function action({ request }: ActionFunctionArgs) {
         customerEmail: customerEmail || null,
         isVerified,
         imageUrl,
-        status: "published", // Auto-publish for now (can be changed to "pending" for moderation)
+        images,
+        status,
         helpful: 0,
         notHelpful: 0,
       },
     });
 
-    // Update product statistics
-    const reviews = await prisma.review.findMany({
-      where: {
-        productId: product.id,
-        status: "published",
-      },
-      select: {
-        rating: true,
-      },
-    });
+    // Update product statistics only if published
+    if (status === "published") {
+      await updateProductStats(product.id);
+    }
 
-    const reviewCount = reviews.length;
-    const averageRating =
-      reviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount;
+    // Trigger Admin Email Notification
+    if (settings?.emailNotifications) {
+      const adminEmail = settings.notificationEmail || "admin@example.com";
+      const subject = `New ${rating}-star review for ${product.title}`;
+      const statusText = status === "published" ? "and was auto-published" : "and requires moderation";
+      const html = `
+        <h2>New Review Received</h2>
+        <p><strong>Product:</strong> ${product.title}</p>
+        <p><strong>Customer:</strong> ${customerName} (${customerEmail || "No email"})</p>
+        <p><strong>Rating:</strong> ${rating}/5 Stars</p>
+        <p><strong>Title:</strong> ${title}</p>
+        <p><strong>Review:</strong> ${content}</p>
+        <br/>
+        <p><em>This review is currently marked as <strong>${status}</strong> ${statusText}.</em></p>
+      `;
 
-    await prisma.product.update({
-      where: { id: product.id },
-      data: {
-        reviewCount,
-        averageRating,
-      },
-    });
+      // Don't wait for email to send before returning the frontend response
+      sendEmail({
+        to: adminEmail,
+        subject,
+        html,
+      }).catch(err => console.error("Failed to send review notification email:", err));
+    }
 
     return Response.json(
       {
         success: true,
         review,
-        message: "Review submitted successfully!",
+        message:
+          status === "published"
+            ? "Review submitted and published successfully!"
+            : "Review submitted successfully! It will appear after moderation.",
       },
       { headers: corsHeaders },
     );

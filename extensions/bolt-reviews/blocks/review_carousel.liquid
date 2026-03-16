@@ -1,0 +1,325 @@
+{% comment %}
+  Review Carousel Block
+  Displays a sliding carousel of store reviews (global or product specific)
+{% endcomment %}
+
+<div class="bolt-review-carousel" data-shop-domain="{{ shop.domain }}" data-app-url="{{ shop.metafields.bolt_reviews.app_url.value | default: 'https://bolt-reviews.onrender.com' }}" id="carousel-{{ block.id }}" style="background-color: {{ block.settings.bg_color }}; padding: {{ block.settings.padding }}px 20px;">
+  
+  {% if block.settings.title != blank %}
+    <h2 class="carousel-title" style="color: {{ block.settings.text_color }}; text-align: {{ block.settings.title_alignment }};">
+      {{ block.settings.title }}
+    </h2>
+  {% endif %}
+
+  <div class="carousel-container">
+    <button class="carousel-btn prev-btn" aria-label="Previous review">&#10094;</button>
+    
+    <div class="carousel-track-wrapper">
+      <div class="carousel-track" id="track-{{ block.id }}">
+        <div class="carousel-loading">
+          <div class="spinner"></div> Loading top reviews...
+        </div>
+      </div>
+    </div>
+
+    <button class="carousel-btn next-btn" aria-label="Next review">&#10095;</button>
+  </div>
+</div>
+
+<template id="carousel-item-template-{{ block.id }}">
+  <div class="carousel-slide" style="background-color: {{ block.settings.card_bg_color }}; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-radius: 8px;">
+    <div class="slide-stars"></div>
+    <h3 class="slide-title" style="color: {{ block.settings.text_color }};"></h3>
+    <p class="slide-content" style="color: {{ block.settings.text_color }}; opacity: 0.9;"></p>
+    <div class="slide-author">
+      <strong class="author-name" style="color: {{ block.settings.text_color }};"></strong>
+      <span class="verified-badge-slide" style="display: none; color: #4CAF50; font-size: 0.8em; margin-left: 5px;">✓ Verified</span>
+    </div>
+  </div>
+</template>
+
+<style>
+  .bolt-review-carousel {
+    max-width: 1200px;
+    margin: 0 auto;
+    position: relative;
+    overflow: hidden;
+  }
+  .carousel-title {
+    margin-bottom: 2rem;
+  }
+  .carousel-container {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+  .carousel-track-wrapper {
+    flex: 1;
+    overflow: hidden;
+    margin: 0 10px;
+  }
+  .carousel-track {
+    display: flex;
+    transition: transform 0.4s ease-in-out;
+  }
+  .carousel-slide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    box-sizing: border-box;
+    padding: 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  @media (min-width: 768px) {
+    .carousel-slide {
+      flex: 0 0 calc(100% / {{ block.settings.items_per_view }});
+      min-width: calc(100% / {{ block.settings.items_per_view }});
+      margin: 0 10px;
+      /* Adjust width to account for margins */
+      width: calc((100% / {{ block.settings.items_per_view }}) - 20px);
+    }
+    .carousel-track {
+      /* Compensate for margins on slides */
+      margin-left: -10px;
+    }
+  }
+  .carousel-btn {
+    background: white;
+    border: 1px solid #eee;
+    color: #333;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 10;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .carousel-btn:hover {
+    background: #f9f9f9;
+  }
+  .slide-stars {
+    color: #FFB800;
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .slide-title {
+    font-size: 1.125rem;
+    margin: 0 0 0.5rem 0;
+  }
+  .slide-content {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    margin: 0 0 1.5rem 0;
+    font-style: italic;
+  }
+  .slide-author {
+    margin-top: auto;
+  }
+  .carousel-loading {
+    width: 100%;
+    text-align: center;
+    padding: 3rem;
+  }
+</style>
+
+<script>
+  (function() {
+    const carouselEl = document.getElementById('carousel-{{ block.id }}');
+    if (!carouselEl) return;
+
+    const track = document.getElementById('track-{{ block.id }}');
+    const template = document.getElementById('carousel-item-template-{{ block.id }}');
+    const shopDomain = carouselEl.dataset.shopDomain;
+    const appUrl = carouselEl.dataset.appUrl;
+    
+    let currentIndex = 0;
+    let autoPlayInterval;
+    const itemsPerView = window.innerWidth >= 768 ? {{ block.settings.items_per_view }} : 1;
+    let slidesCount = 0;
+
+    async function fetchCarouselReviews() {
+      try {
+        // Fetch published reviews globally for the shop, only 5 and 4 star reviews
+        const res = await fetch(`${appUrl}/api/public/reviews?shopDomain=${shopDomain}&limit=10`);
+        const data = await res.json();
+        const reviews = (data.reviews || []).filter(r => r.rating >= 4);
+
+        if (reviews.length === 0) {
+          track.innerHTML = '<div style="width: 100%; text-align: center; padding: 2rem;">No reviews found yet.</div>';
+          return;
+        }
+
+        renderSlides(reviews);
+      } catch (err) {
+        console.error('Error fetching carousel reviews:', err);
+        track.innerHTML = '<div style="width: 100%; text-align: center; padding: 2rem;">Unable to load reviews.</div>';
+      }
+    }
+
+    function renderSlides(reviews) {
+      track.innerHTML = '';
+      slidesCount = reviews.length;
+
+      reviews.forEach(review => {
+        const slideFragment = template.content.cloneNode(true);
+        const slide = slideFragment.querySelector('.carousel-slide');
+        
+        slide.querySelector('.slide-stars').innerHTML = '★'.repeat(review.rating) + '<span style="color:#e0e0e0">' + '★'.repeat(5 - review.rating) + '</span>';
+        slide.querySelector('.slide-title').textContent = review.title || '';
+        
+        // Truncate long content
+        let content = review.content || '';
+        if (content.length > 150) content = content.substring(0, 150) + '...';
+        slide.querySelector('.slide-content').textContent = `"${content}"`;
+        
+        slide.querySelector('.author-name').textContent = review.customerName || 'Anonymous';
+        if (review.isVerified) {
+          slide.querySelector('.verified-badge-slide').style.display = 'inline';
+        }
+
+        track.appendChild(slide);
+      });
+
+      updateCarousel();
+      
+      {% if block.settings.auto_play %}
+        startAutoPlay();
+      {% endif %}
+    }
+
+    function updateCarousel() {
+      if (slidesCount === 0) return;
+      
+      // Calculate max index to avoid sliding past empty space
+      const maxIndex = Math.max(0, slidesCount - itemsPerView);
+      if (currentIndex > maxIndex) currentIndex = maxIndex;
+      if (currentIndex < 0) currentIndex = 0;
+
+      let slideWidth = 100;
+      if (window.innerWidth >= 768) {
+        slideWidth = 100 / itemsPerView;
+      }
+      
+      track.style.transform = `translateX(-${currentIndex * slideWidth}%)`;
+    }
+
+    function startAutoPlay() {
+      stopAutoPlay();
+      autoPlayInterval = setInterval(() => {
+        const maxIndex = Math.max(0, slidesCount - itemsPerView);
+        if (currentIndex >= maxIndex) {
+          currentIndex = 0;
+        } else {
+          currentIndex++;
+        }
+        updateCarousel();
+      }, {{ block.settings.auto_play_speed }} * 1000);
+    }
+
+    function stopAutoPlay() {
+      if (autoPlayInterval) clearInterval(autoPlayInterval);
+    }
+
+    carouselEl.querySelector('.prev-btn').addEventListener('click', () => {
+      currentIndex--;
+      updateCarousel();
+      {% if block.settings.auto_play %} startAutoPlay(); {% endif %} // Reset timer
+    });
+
+    carouselEl.querySelector('.next-btn').addEventListener('click', () => {
+      currentIndex++;
+      updateCarousel();
+      {% if block.settings.auto_play %} startAutoPlay(); {% endif %} // Reset timer
+    });
+
+    // Handle resize
+    window.addEventListener('resize', () => updateCarousel());
+
+    fetchCarouselReviews();
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Review Carousel",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Heading",
+      "default": "What Our Customers Say"
+    },
+    {
+      "type": "select",
+      "id": "title_alignment",
+      "label": "Heading Alignment",
+      "options": [
+        {"value": "left", "label": "Left"},
+        {"value": "center", "label": "Center"},
+        {"value": "right", "label": "Right"}
+      ],
+      "default": "center"
+    },
+    {
+      "type": "color",
+      "id": "bg_color",
+      "label": "Background Color",
+      "default": "transparent"
+    },
+    {
+      "type": "color",
+      "id": "card_bg_color",
+      "label": "Card Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#333333"
+    },
+    {
+      "type": "range",
+      "id": "padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Section Padding (Top/Bottom)",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "items_per_view",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "label": "Reviews per view (Desktop)",
+      "default": 3
+    },
+    {
+      "type": "checkbox",
+      "id": "auto_play",
+      "label": "Enable Auto-Play",
+      "default": true
+    },
+    {
+      "type": "range",
+      "id": "auto_play_speed",
+      "min": 3,
+      "max": 10,
+      "step": 1,
+      "unit": "sec",
+      "label": "Auto-Play Speed",
+      "default": 5
+    }
+  ]
+}
+{% endschema %}

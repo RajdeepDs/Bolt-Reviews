@@ -33,13 +33,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const shopifyProductId = url.searchParams.get("productId");
+  const shopDomain = url.searchParams.get("shopDomain");
   const rating = url.searchParams.get("rating");
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "10"), 50); // Max 50 per page
 
-  if (!shopifyProductId) {
+  if (!shopifyProductId && !shopDomain) {
     let response = new Response(
-      JSON.stringify({ error: "Product ID is required" }),
+      JSON.stringify({ error: "Either Product ID or Shop Domain is required" }),
       {
         status: 400,
         headers: { "Content-Type": "application/json" },
@@ -55,51 +56,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   try {
-    // Find the product by Shopify product ID - check both formats (numeric and GID)
-    const gidFormat = `gid://shopify/Product/${shopifyProductId}`;
-    const product = await prisma.product.findFirst({
-      where: {
-        OR: [
-          { shopifyProductId: shopifyProductId },
-          { shopifyProductId: gidFormat },
-        ],
-      },
-      select: {
-        id: true,
-      },
-    });
-
-    // If product doesn't exist, return empty reviews
-    if (!product) {
-      let response = new Response(
-        JSON.stringify({
-          reviews: [],
-          pagination: {
-            page,
-            limit,
-            total: 0,
-            pages: 0,
-          },
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      );
-      response = addRateLimitHeaders(
-        response,
-        rateLimit.remaining,
-        rateLimit.resetAt,
-        100,
-      );
-      return addCorsHeaders(response, request);
-    }
-
-    const where: {
-      productId: string;
-      status: string;
-      rating?: number;
-    } = {
-      productId: product.id,
+    let where: any = {
       status: "published",
     };
+
+    if (shopifyProductId) {
+      // Find the product by Shopify product ID
+      const gidFormat = `gid://shopify/Product/${shopifyProductId}`;
+      const product = await prisma.product.findFirst({
+        where: {
+          OR: [
+            { shopifyProductId: shopifyProductId },
+            { shopifyProductId: gidFormat },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (!product) {
+        let response = new Response(
+          JSON.stringify({
+            reviews: [],
+            pagination: { page, limit, total: 0, pages: 0 },
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+        response = addRateLimitHeaders(response, rateLimit.remaining, rateLimit.resetAt, 100);
+        return addCorsHeaders(response, request);
+      }
+      where.productId = product.id;
+    } else if (shopDomain) {
+      where.shopId = shopDomain;
+      // For global fetch (carousel), usually we just want 5-star or highly rated ones, 
+      // but let's let the frontend pass the rating filter.
+    }
 
     if (rating) {
       where.rating = parseInt(rating);
@@ -119,8 +109,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
           customerName: true,
           isVerified: true,
           imageUrl: true,
+          images: true,
           helpful: true,
           notHelpful: true,
+          merchantReply: true,
+          merchantReplyAt: true,
           createdAt: true,
           updatedAt: true,
         },

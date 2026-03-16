@@ -1,10 +1,9 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { updateProductStats } from "../utils/product-stats.server";
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  if (request.method !== "PATCH" && request.method !== "POST") {
+  if (request.method !== "POST" && request.method !== "PATCH") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
   }
 
@@ -17,7 +16,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   try {
     const body = await request.json();
-    const { action: reviewAction } = body; // "publish" or "unpublish"
+    const { reply } = body;
+
+    if (typeof reply !== "string") {
+      return Response.json(
+        { error: "Reply must be a string" },
+        { status: 400 },
+      );
+    }
 
     // Verify review exists and belongs to this shop
     const existingReview = await prisma.review.findFirst({
@@ -34,53 +40,38 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
-    // Determine new status
-    let newStatus: string;
-    if (reviewAction === "publish") {
-      newStatus = "published";
-    } else if (reviewAction === "unpublish") {
-      newStatus = "pending";
-    } else {
-      return Response.json(
-        { error: "Invalid action. Must be 'publish' or 'unpublish'" },
-        { status: 400 },
-      );
-    }
-
-    // Update the review
+    // Update with reply (or clear reply if empty string)
     const updatedReview = await prisma.review.update({
       where: { id: reviewId },
-      data: { status: newStatus },
+      data: {
+        merchantReply: reply.trim() || null,
+        merchantReplyAt: reply.trim() ? new Date() : null,
+      },
       include: {
         product: {
           select: {
             id: true,
             title: true,
-            handle: true,
-            imageUrl: true,
           },
         },
       },
     });
 
-    // Update product stats
-    await updateProductStats(existingReview.productId);
-
     return Response.json({
       success: true,
       review: updatedReview,
-      message: `Review ${reviewAction === "publish" ? "published" : "unpublished"} successfully`,
+      message: reply.trim()
+        ? "Reply saved successfully"
+        : "Reply removed successfully",
     });
   } catch (error) {
-    console.error("Error updating review status:", error);
+    console.error("Error saving merchant reply:", error);
     return Response.json(
       {
-        error: "Failed to update review status",
+        error: "Failed to save reply",
         details: (error as Error).message,
       },
       { status: 500 },
     );
   }
 };
-
-

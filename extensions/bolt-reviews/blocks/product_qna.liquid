@@ -1,0 +1,251 @@
+{% comment %}
+  Product Q&A Block
+  Displays published Q&A pairs for a product and allows customers to ask new questions.
+{% endcomment %}
+
+<div class="bolt-qna-widget" id="bolt-qna-{{ block.id }}" style="background-color: {{ block.settings.bg_color }}; padding: {{ block.settings.padding }}px; border-radius: 8px;">
+  
+  <h2 class="qna-title" style="color: {{ block.settings.text_color }};">Customer Questions & Answers</h2>
+  
+  <div class="qna-header-actions">
+    <button class="bolt-btn btn-primary" id="ask-question-btn-{{ block.id }}" style="background-color: {{ block.settings.primary_color }};">
+      Ask a Question
+    </button>
+  </div>
+
+  <!-- Ask Question Form (Hidden initially) -->
+  <div id="ask-question-form-{{ block.id }}" class="qna-form-container" style="display: none; background: #f9f9f9; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h3 style="margin-top: 0">Ask a question about this product</h3>
+    <form id="qna-submit-form-{{ block.id }}">
+      <input type="hidden" name="productId" value="{{ product.id }}">
+      
+      <div class="form-row">
+        <label>Your Name *</label>
+        <input type="text" name="askerName" required class="qna-input">
+      </div>
+      
+      <div class="form-row">
+        <label>Email Address * <small>(will not be published)</small></label>
+        <input type="email" name="askerEmail" required class="qna-input">
+      </div>
+
+      <div class="form-row">
+        <label>Your Question *</label>
+        <textarea name="content" required rows="3" class="qna-textarea" placeholder="What would you like to know?"></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="bolt-btn btn-primary" style="background-color: {{ block.settings.primary_color }};">Submit Question</button>
+        <button type="button" class="bolt-btn btn-secondary" onclick="document.getElementById('ask-question-form-{{ block.id }}').style.display = 'none';">Cancel</button>
+      </div>
+      <div id="qna-form-message-{{ block.id }}" style="margin-top: 10px; display: none;"></div>
+    </form>
+  </div>
+
+  <!-- Q&A List -->
+  <div id="qna-list-{{ block.id }}" class="qna-list">
+    <div class="qna-loading">Loading questions...</div>
+  </div>
+
+</div>
+
+<template id="qna-item-template-{{ block.id }}">
+  <div class="qna-item" style="border-bottom: 1px solid #eee; padding: 15px 0;">
+    <div class="qna-question">
+      <strong>Q: <span class="qna-content" style="color: {{ block.settings.text_color }};"></span></strong>
+      <div class="qna-meta" style="color: #666; font-size: 0.85em; margin-top: 4px;">
+        Asked by <span class="qna-asker"></span> on <span class="qna-date"></span>
+      </div>
+    </div>
+    <div class="qna-answer-container" style="display:none; margin-top: 12px; padding-left: 20px; border-left: 3px solid {{ block.settings.primary_color }};">
+      <div class="qna-answer">
+        <strong>A:</strong> <span class="qna-answer-content" style="color: {{ block.settings.text_color }};"></span>
+      </div>
+      <div class="qna-meta" style="color: #666; font-size: 0.85em; margin-top: 4px;">
+        Answered by Store Owner on <span class="qna-answer-date"></span>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+  .bolt-qna-widget {
+    font-family: inherit;
+    margin: 2rem 0;
+  }
+  .bolt-qna-widget * {
+    box-sizing: border-box;
+  }
+  .qna-header-actions {
+    margin-bottom: 20px;
+  }
+  .bolt-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .btn-primary {
+    color: white;
+  }
+  .btn-secondary {
+    background: #e0e0e0;
+    color: #333;
+  }
+  .qna-input, .qna-textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-top: 5px;
+  }
+  .form-row {
+    margin-bottom: 15px;
+  }
+  .form-actions {
+    display: flex;
+    gap: 10px;
+  }
+  .qna-loading {
+    padding: 20px 0;
+    text-align: center;
+    color: #666;
+  }
+  .qna-item {
+    margin-bottom: 10px;
+  }
+</style>
+
+<script>
+  (function() {
+    const blockId = '{{ block.id }}';
+    const productId = '{{ product.id }}';
+    const appUrl = '{{ shop.metafields.bolt_reviews.app_url.value | default: "https://bolt-reviews.onrender.com" }}';
+    
+    // Toggle form
+    document.getElementById('ask-question-btn-' + blockId).addEventListener('click', () => {
+      document.getElementById('ask-question-form-' + blockId).style.display = 'block';
+    });
+
+    // Form submission
+    document.getElementById('qna-submit-form-' + blockId).addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const btn = form.querySelector('button[type="submit"]');
+      const msg = document.getElementById('qna-form-message-' + blockId);
+      
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      
+      try {
+        const formData = new FormData(form);
+        const res = await fetch(`${appUrl}/api/public/questions/create`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          msg.style.display = 'block';
+          msg.style.color = 'green';
+          msg.textContent = data.message;
+          form.reset();
+          setTimeout(() => {
+            document.getElementById('ask-question-form-' + blockId).style.display = 'none';
+            msg.style.display = 'none';
+          }, 3000);
+        } else {
+          throw new Error(data.error || 'Failed to submit');
+        }
+      } catch (err) {
+        msg.style.display = 'block';
+        msg.style.color = 'red';
+        msg.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Question';
+      }
+    });
+
+    // Load Q&As
+    async function loadQuestions() {
+      const list = document.getElementById('qna-list-' + blockId);
+      const template = document.getElementById('qna-item-template-' + blockId);
+      
+      try {
+        const res = await fetch(`${appUrl}/api/public/questions?productId=${productId}`);
+        const data = await res.json();
+        const questions = data.questions || [];
+        
+        if (questions.length === 0) {
+          list.innerHTML = '<p style="color: #666; font-style: italic;">No questions yet. Be the first to ask!</p>';
+          return;
+        }
+
+        list.innerHTML = '';
+        questions.forEach(q => {
+          const fragment = template.content.cloneNode(true);
+          const item = fragment.querySelector('.qna-item');
+          
+          item.querySelector('.qna-content').textContent = q.content;
+          item.querySelector('.qna-asker').textContent = q.askerName;
+          item.querySelector('.qna-date').textContent = new Date(q.createdAt).toLocaleDateString();
+          
+          if (q.merchantAnswer) {
+            const answerContainer = item.querySelector('.qna-answer-container');
+            answerContainer.style.display = 'block';
+            answerContainer.querySelector('.qna-answer-content').textContent = q.merchantAnswer;
+            answerContainer.querySelector('.qna-answer-date').textContent = new Date(q.answeredAt || q.createdAt).toLocaleDateString();
+          }
+          
+          list.appendChild(item);
+        });
+      } catch (err) {
+        list.innerHTML = '<p style="color: red;">Unable to load questions.</p>';
+        console.error('Q&A load error:', err);
+      }
+    }
+
+    loadQuestions();
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Product Q&A",
+  "target": "section",
+  "templates": ["product"],
+  "settings": [
+    {
+      "type": "color",
+      "id": "bg_color",
+      "label": "Background Color",
+      "default": "#ffffff"
+    },
+    {
+      "type": "color",
+      "id": "text_color",
+      "label": "Text Color",
+      "default": "#333333"
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Primary Button Color",
+      "default": "#000000"
+    },
+    {
+      "type": "range",
+      "id": "padding",
+      "min": 0,
+      "max": 100,
+      "step": 4,
+      "unit": "px",
+      "label": "Padding",
+      "default": 20
+    }
+  ]
+}
+{% endschema %}

@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { updateProductStats } from "../utils/product-stats.server";
 
 /**
  * CSV Import Format:
@@ -55,8 +56,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    // Map competitor headers to our expected format
+    const headerMapping: Record<string, string> = {
+      // Judge.me
+      "product_handle": "Product Handle",
+      "reviewer_name": "Customer Name",
+      "reviewer_email": "Customer Email",
+      "rating": "Rating",
+      "title": "Review Title",
+      "body": "Review Content",
+      "picture_urls": "Image URL",
+      "review_date": "Created At",
+      // Loox
+      "author": "Customer Name",
+      "email": "Customer Email",
+      "photo_url": "Image URL",
+      "created_at": "Created At",
+      // Yotpo
+      "product_url": "Product Handle", // Custom mapping logic might be needed to extract handle from URL
+      "display_name": "Customer Name",
+      "review_score": "Rating",
+    };
+
     // Parse CSV
-    const headers = lines[0].split(",").map((h) => h.trim());
+    let headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    
+    // Normalize headers based on mapping
+    headers = headers.map(h => {
+      const normalized = h.toLowerCase();
+      return headerMapping[normalized] || h;
+    });
+
     const rows = lines.slice(1);
 
     // Validate required headers
@@ -73,7 +103,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (missingHeaders.length > 0) {
       return Response.json(
         {
-          error: `Missing required headers: ${missingHeaders.join(", ")}`,
+          error: `Missing required headers: ${missingHeaders.join(", ")}. Uploaded headers: ${headers.join(", ")}`,
         },
         { status: 400 },
       );
@@ -108,10 +138,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           continue;
         }
 
+        let createdAtDate = new Date();
+        if (reviewData["Created At"]) {
+          const parsedDate = new Date(reviewData["Created At"]);
+          if (!isNaN(parsedDate.getTime())) {
+            createdAtDate = parsedDate;
+          }
+        }
+
+        // Handle image URLs (Judge.me might provide comma-separated URLs)
+        const rawImageUrl = reviewData["Image URL"] || null;
+        let imageUrl = null;
+        const images: string[] = [];
+        
+        if (rawImageUrl) {
+          const urls = rawImageUrl.split(',').map(url => url.trim().replace(/^"|"$/g, ""));
+          if (urls.length > 0) {
+            imageUrl = urls[0];
+            images.push(...urls);
+          }
+        }
+
+        let productHandle = reviewData["Product Handle"];
+        // Extract handle if Yotpo format (URL instead of handle)
+        if (productHandle.includes('/products/')) {
+          productHandle = productHandle.split('/products/').pop()?.split('?')[0] || productHandle;
+        }
+
         // Find product by handle
         const product = await prisma.product.findFirst({
           where: {
-            handle: reviewData["Product Handle"],
+            handle: productHandle,
             shopId: session.shop,
           },
         });
@@ -119,7 +176,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (!product) {
           skippedCount++;
           errors.push(
-            `Row ${i + 2}: Product with handle "${reviewData["Product Handle"]}" not found`,
+            `Row ${i + 2}: Product with handle "${productHandle}" not found`,
           );
           continue;
         }
@@ -158,10 +215,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             status,
             isVerified:
               reviewData["Verified Purchase"]?.toLowerCase() === "yes" ||
-              reviewData["Verified Purchase"]?.toLowerCase() === "true",
+              reviewData["Verified Purchase"]?.toLowerCase() === "true" ||
+              reviewData["verified"]?.toLowerCase() === "true", // Some formats use 'verified'
             helpful: parseInt(reviewData["Helpful Votes"] || "0") || 0,
             notHelpful: parseInt(reviewData["Not Helpful Votes"] || "0") || 0,
-            imageUrl: reviewData["Image URL"] || null,
+            imageUrl,
+            images,
+            createdAt: createdAtDate,
           },
         });
 
@@ -231,26 +291,4 @@ function parseCSVRow(row: string): string[] {
   return values;
 }
 
-// Helper function to update product stats
-async function updateProductStats(productId: string) {
-  const stats = await prisma.review.aggregate({
-    where: {
-      productId,
-      status: "published",
-    },
-    _avg: {
-      rating: true,
-    },
-    _count: {
-      id: true,
-    },
-  });
 
-  await prisma.product.update({
-    where: { id: productId },
-    data: {
-      averageRating: stats._avg.rating || 0,
-      reviewCount: stats._count.id,
-    },
-  });
-}

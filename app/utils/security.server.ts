@@ -3,6 +3,8 @@
  * Adds security headers and CORS configuration
  */
 
+import { LRUCache } from "lru-cache";
+
 export interface SecurityHeaders {
   "X-Frame-Options": string;
   "X-Content-Type-Options": string;
@@ -208,7 +210,10 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
-const rateLimitStore = new Map<string, RateLimitEntry>();
+const rateLimitStore = new LRUCache<string, RateLimitEntry>({
+  max: 10000, // Maximum number of IPs to track simultaneously
+  ttl: 60000 * 5, // Keys expire auto after 5 minutes max
+});
 
 export interface RateLimitOptions {
   windowMs?: number; // Time window in milliseconds
@@ -232,23 +237,17 @@ export function checkRateLimit(
   const opts = { ...DEFAULT_RATE_LIMIT, ...options };
 
   // Generate key for rate limiting (IP address or custom)
-  const key = opts.keyGenerator
-    ? opts.keyGenerator(request)
-    : request.headers.get("CF-Connecting-IP") ||
-      request.headers.get("X-Forwarded-For")?.split(",")[0] ||
-      "unknown";
+  let ip = "unknown";
+  try {
+    ip = request.headers.get("CF-Connecting-IP") ||
+         request.headers.get("X-Forwarded-For")?.split(",")[0] ||
+         "unknown";
+  } catch(e) {}
+
+  const key = opts.keyGenerator ? opts.keyGenerator(request) : ip;
 
   const now = Date.now();
   const entry = rateLimitStore.get(key);
-
-  // Clean up old entries periodically
-  if (rateLimitStore.size > 10000) {
-    for (const [k, v] of rateLimitStore.entries()) {
-      if (v.resetAt < now) {
-        rateLimitStore.delete(k);
-      }
-    }
-  }
 
   if (!entry || entry.resetAt < now) {
     // Create new entry

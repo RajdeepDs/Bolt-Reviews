@@ -1,14 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import {
+  useLoaderData,
+  useFetcher,
+  useSearchParams,
+} from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 
+const PRODUCTS_PER_PAGE = 25;
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
-  // Get all products for this shop with their review stats
+  const url = new URL(request.url);
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+
+  // Get total count
+  const totalCount = await prisma.product.count({
+    where: { shopId: session.shop },
+  });
+
+  // Get products with pagination
   const products = await prisma.product.findMany({
     where: {
       shopId: session.shop,
@@ -16,6 +30,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     orderBy: {
       createdAt: "desc",
     },
+    skip: (page - 1) * PRODUCTS_PER_PAGE,
+    take: PRODUCTS_PER_PAGE,
   });
 
   // Get pending review counts for each product
@@ -35,12 +51,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
   );
 
-  return { products: productsWithPending };
+  return {
+    products: productsWithPending,
+    totalCount,
+    page,
+    totalPages: Math.ceil(totalCount / PRODUCTS_PER_PAGE),
+  };
 };
 
 export default function ProductsIndex() {
-  const { products } = useLoaderData<typeof loader>();
+  const { products, totalCount, page, totalPages } =
+    useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
 
   const handleSync = async () => {
@@ -49,19 +72,35 @@ export default function ProductsIndex() {
   };
 
   // Reset syncing state when fetcher completes
-  if (isSyncing && fetcher.state === "idle") {
-    setIsSyncing(false);
-    if (fetcher.data?.success) {
-      (window as any).shopify?.toast?.show(
-        (fetcher.data as any).message || "Products synced successfully",
-      );
+  useEffect(() => {
+    if (isSyncing && fetcher.state === "idle" && fetcher.data) {
+      setIsSyncing(false);
+      const data = fetcher.data as {
+        success?: boolean;
+        message?: string;
+      };
+      if (data?.success) {
+        (window as any).shopify?.toast?.show(
+          data.message || "Products synced successfully",
+        );
+      }
     }
-  }
+  }, [isSyncing, fetcher.state, fetcher.data]);
 
   const handleSetup = async () => {
     setIsSyncing(true);
     fetcher.submit({}, { method: "post", action: "/api/setup" });
   };
+
+  // Pagination
+  const goToPage = (newPage: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("page", String(newPage));
+    setSearchParams(params);
+  };
+
+  const startItem = (page - 1) * PRODUCTS_PER_PAGE + 1;
+  const endItem = Math.min(page * PRODUCTS_PER_PAGE, totalCount);
 
   return (
     <s-page heading="Products" inlineSize="base">
@@ -108,9 +147,18 @@ export default function ProductsIndex() {
             ) : (
               products.map((product) => (
                 <s-table-row key={product.id}>
-                  {/* Product Name */}
+                  {/* Product Name + Thumbnail */}
                   <s-table-cell>
-                    <s-stack gap="small">
+                    <s-stack direction="inline" gap="small" alignItems="center">
+                      {product.imageUrl ? (
+                        <s-thumbnail
+                          src={product.imageUrl}
+                          alt={product.title}
+                          size="small"
+                        />
+                      ) : (
+                        <s-thumbnail alt={product.title} size="small" />
+                      )}
                       <s-text>{product.title}</s-text>
                     </s-stack>
                   </s-table-cell>
@@ -152,6 +200,41 @@ export default function ProductsIndex() {
             )}
           </s-table-body>
         </s-table>
+
+        {/* PAGINATION */}
+        {totalPages > 1 && (
+          <s-box padding="base">
+            <s-stack
+              direction="inline"
+              gap="base"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <s-text color="subdued">
+                Showing {startItem}–{endItem} of {totalCount} products
+              </s-text>
+              <s-stack direction="inline" gap="small">
+                <s-button
+                  variant="tertiary"
+                  onClick={() => goToPage(page - 1)}
+                  disabled={page <= 1}
+                >
+                  ← Previous
+                </s-button>
+                <s-text>
+                  Page {page} of {totalPages}
+                </s-text>
+                <s-button
+                  variant="tertiary"
+                  onClick={() => goToPage(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  Next →
+                </s-button>
+              </s-stack>
+            </s-stack>
+          </s-box>
+        )}
       </s-section>
     </s-page>
   );
