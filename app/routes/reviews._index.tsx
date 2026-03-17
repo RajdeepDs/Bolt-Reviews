@@ -726,8 +726,8 @@ export default function ReviewsIndex() {
       <s-section padding="none">
         {/* FILTER BUTTONS + SORT */}
         <s-table>
-          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto auto 1fr">
-            <s-stack direction="inline">
+          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
+            <s-stack direction="inline" gap="small-200">
               <s-button
                 variant={currentFilter === "all" ? "secondary" : "tertiary"}
                 onClick={() => setFilter("all")}
@@ -749,17 +749,6 @@ export default function ReviewsIndex() {
                 Pending ({counts.pending})
               </s-button>
             </s-stack>
-            <s-select
-              label="Sort by"
-              labelAccessibilityVisibility="exclusive"
-              value={searchParams.get("sort") || "newest"}
-              onInput={(e: any) => handleSortChange(e.target.value)}
-            >
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="rating-high">Rating: high to low</option>
-              <option value="rating-low">Rating: low to high</option>
-            </s-select>
             <s-text-field
               label="Search reviews"
               labelAccessibilityVisibility="exclusive"
