@@ -276,12 +276,15 @@ export default function ReviewsIndex() {
   const isSubmitting = navigation.state === "submitting";
   const isLoading = navigation.state === "loading";
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importModalRef = useRef<HTMLElement>(null);
 
   const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState(
     searchParams.get("search") || "",
   );
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importShouldRevalidate, setImportShouldRevalidate] = useState(false);
 
   // Review detail modal state
   const [selectedReview, setSelectedReview] = useState<
@@ -406,37 +409,30 @@ export default function ReviewsIndex() {
       shopify.toast.show("Exporting reviews...");
     }
   };
+  // Import click handled natively by label
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
   };
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleModalImport = () => {
+    if (!selectedFile) return;
 
     setIsImporting(true);
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", selectedFile);
 
     fetcher.submit(formData, {
       method: "post",
       action: "/api/reviews/import",
       encType: "multipart/form-data",
     });
-
-    // Reset file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
   };
 
-  // Handle import completion — use revalidator instead of window.location.reload
+  // Handle import completion
   useEffect(() => {
     if (isImporting && fetcher.state === "idle" && fetcher.data) {
-      setIsImporting(false);
       const data = fetcher.data as {
         success?: boolean;
         message?: string;
@@ -444,18 +440,35 @@ export default function ReviewsIndex() {
       };
       const shopify = (window as any).shopify;
 
+      // Reset import state
+      setIsImporting(false);
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
       if (data.success) {
+        // Close modal using the Popover API (how s-modal works under the hood)
+        (document.getElementById("import-modal") as any)?.hidePopover?.();
         if (shopify?.toast?.show) {
           shopify.toast.show(data.message || "Reviews imported successfully");
         }
-        revalidator.revalidate();
+        // Signal the separate revalidation effect instead of calling directly
+        setImportShouldRevalidate(true);
       } else {
         if (shopify?.toast?.show) {
           shopify.toast.show(data.error || "Import failed", { isError: true });
         }
       }
     }
-  }, [isImporting, fetcher.state, fetcher.data, revalidator]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isImporting, fetcher.state, fetcher.data]);
+
+  // Deferred revalidation — runs after the import completion state updates settle
+  useEffect(() => {
+    if (importShouldRevalidate) {
+      setImportShouldRevalidate(false);
+      revalidator.revalidate();
+    }
+  }, [importShouldRevalidate, revalidator]);
 
   // --- Review Detail Modal ---
   const openReviewDetail = (review: (typeof reviews)[0]) => {
@@ -575,20 +588,82 @@ export default function ReviewsIndex() {
 
   return (
     <s-page heading="My Reviews" inlineSize="base">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".csv"
-        style={{ display: "none" }}
-        onChange={handleFileChange}
-      />
+      <s-button slot="primary-action" commandFor="import-modal">Import reviews (CSV)</s-button>
+      <s-modal
+        id="import-modal"
+        // @ts-expect-error web component ref
+        ref={importModalRef}
+        heading="Import Reviews"
+        onClose={() => {
+          setSelectedFile(null);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }}
+      >
+        <s-stack gap="base">
+          <s-text>Select a <strong>.csv</strong> file to import reviews. Download the{" "}
+            <s-link onClick={() => window.open("/api/reviews/template", "_blank")}>
+              CSV template
+            </s-link>{" "}to see the expected format.
+          </s-text>
+
+          <s-box
+            borderWidth="base"
+            borderRadius="base"
+            padding="large"
+            // @ts-expect-error web component
+            style={{
+              borderStyle: "dashed",
+              textAlign: "center",
+              cursor: "pointer",
+            }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <s-stack gap="small" alignItems="center">
+              {/* <span style={{ fontSize: "1.5rem", lineHeight: 1 }}>⬆️</span> */}
+              <s-icon type="upload" />
+              <s-text>
+                {selectedFile
+                  ? selectedFile.name
+                  : "Click to choose a CSV file"}
+              </s-text>
+              {selectedFile && (
+                <s-text color="subdued">
+                  {(selectedFile.size / 1024).toFixed(1)} KB
+                </s-text>
+              )}
+            </s-stack>
+          </s-box>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+          />
+
+          <s-stack direction="inline" gap="small" justifyContent="end">
+            <s-button
+              commandFor="import-modal"
+              command="--hide"
+              disabled={isImporting}
+            >
+              Cancel
+            </s-button>
+            <s-button
+              variant="primary"
+              onClick={handleModalImport}
+              disabled={!selectedFile || isImporting}
+            >
+              {isImporting ? "Uploading..." : "Upload"}
+            </s-button>
+          </s-stack>
+        </s-stack>
+      </s-modal>
       <s-button slot="secondary-actions" commandFor="more-actions-id">
         More actions
       </s-button>
       <s-menu id="more-actions-id">
-        <s-button onClick={handleImportClick} disabled={isImporting}>
-          {isImporting ? "Importing..." : "Import reviews (CSV)"}
-        </s-button>
         <s-button onClick={handleExport}>Export reviews (CSV)</s-button>
         <s-button
           onClick={() => window.open("/api/reviews/template", "_blank")}
@@ -865,34 +940,34 @@ export default function ReviewsIndex() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                     {selectedReview.images?.length > 0
                       ? selectedReview.images.map((img: string, i: number) => (
-                          <img
-                            key={i}
-                            src={img}
-                            alt={`Review image ${i + 1}`}
-                            style={{
-                              width: "120px",
-                              height: "120px",
-                              borderRadius: "8px",
-                              objectFit: "cover",
-                              border: "1px solid var(--s-color-border)",
-                            }}
-                            onClick={() => window.open(img, "_blank")}
-                          />
-                        ))
+                        <img
+                          key={i}
+                          src={img}
+                          alt={`Review image ${i + 1}`}
+                          style={{
+                            width: "120px",
+                            height: "120px",
+                            borderRadius: "8px",
+                            objectFit: "cover",
+                            border: "1px solid var(--s-color-border)",
+                          }}
+                          onClick={() => window.open(img, "_blank")}
+                        />
+                      ))
                       : selectedReview.imageUrl && (
-                          <img
-                            src={selectedReview.imageUrl}
-                            alt="Review image"
-                            style={{
-                              width: "120px",
-                              height: "120px",
-                              borderRadius: "8px",
-                              objectFit: "cover",
-                              border: "1px solid var(--s-color-border)",
-                            }}
-                            onClick={() => window.open(selectedReview.imageUrl!, "_blank")}
-                          />
-                        )}
+                        <img
+                          src={selectedReview.imageUrl}
+                          alt="Review image"
+                          style={{
+                            width: "120px",
+                            height: "120px",
+                            borderRadius: "8px",
+                            objectFit: "cover",
+                            border: "1px solid var(--s-color-border)",
+                          }}
+                          onClick={() => window.open(selectedReview.imageUrl!, "_blank")}
+                        />
+                      )}
                   </div>
                 </s-box>
               )}
@@ -1115,9 +1190,9 @@ export default function ReviewsIndex() {
 
 export function ErrorBoundary() {
   return (
-    <s-page title="Reviews">
-      <s-box padding="400" background="white" border="1px solid #dfe3e8" borderRadius="200">
-        <s-text variant="headingLg" color="critical">Error rendering Reviews</s-text>
+    <s-page heading="Reviews">
+      <s-box padding="base" borderRadius="base">
+        <s-text><strong>Error rendering Reviews</strong></s-text>
         <div style={{ marginTop: '16px' }}>
           <p>An unexpected error occurred while loading the reviews dashboard. Please try refreshing.</p>
         </div>
