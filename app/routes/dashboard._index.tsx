@@ -144,8 +144,8 @@ export default function DashboardIndex() {
     <s-page heading="Dashboard" inlineSize="base">
       {/* KPI BAR */}
       <s-section accessibilityLabel="KPI bar" padding="none">
-        <s-stack direction="inline" gap="none" alignItems="stretch">
-          <s-box padding="base" inlineSize="25%" minInlineSize="0">
+        <s-grid gap="none" gridTemplateColumns="1fr 1fr 1fr 1fr">
+          <s-box padding="base">
             <s-stack direction="block" gap="small-100">
               <s-text color="subdued">Average Rating</s-text>
               <s-heading>
@@ -155,43 +155,47 @@ export default function DashboardIndex() {
               </s-heading>
             </s-stack>
           </s-box>
-          <s-divider direction="block" />
-          <s-box padding="base" inlineSize="25%" minInlineSize="0">
-            <s-stack direction="block" gap="small-100">
-              <s-text color="subdued">Total Reviews</s-text>
-              <s-heading>{kpi.totalReviews}</s-heading>
-            </s-stack>
-          </s-box>
-          <s-divider direction="block" />
-          <s-box padding="base" inlineSize="25%" minInlineSize="0">
-            <s-stack direction="block" gap="small-100">
-              <s-text color="subdued">Pending Reviews</s-text>
-              <s-heading>{kpi.pendingReviews}</s-heading>
-            </s-stack>
-          </s-box>
-          <s-divider direction="block" />
-          <s-box padding="base" inlineSize="25%" minInlineSize="0">
-            <s-stack direction="block" gap="small-100">
-              <s-text color="subdued">This Month</s-text>
-              <s-heading>
-                {kpi.thisMonthReviews}
-                {kpi.monthTrend !== 0 && (
-                  <s-text
-                    color="subdued"
-                  >
-                    {" "}
-                    ({kpi.monthTrend > 0 ? "+" : ""}
-                    {kpi.monthTrend}%)
-                  </s-text>
-                )}
-              </s-heading>
-            </s-stack>
-          </s-box>
-        </s-stack>
+          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
+            <s-box padding="base">
+              <s-stack direction="block" gap="small-100">
+                <s-text color="subdued">Total Reviews</s-text>
+                <s-heading>{kpi.totalReviews}</s-heading>
+              </s-stack>
+            </s-box>
+          </div>
+          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
+            <s-box padding="base">
+              <s-stack direction="block" gap="small-100">
+                <s-text color="subdued">Pending Reviews</s-text>
+                <s-heading>{kpi.pendingReviews}</s-heading>
+              </s-stack>
+            </s-box>
+          </div>
+          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
+            <s-box padding="base">
+              <s-stack direction="block" gap="small-100">
+                <s-text color="subdued">This Month</s-text>
+                <s-heading>
+                  {kpi.thisMonthReviews}
+                  {kpi.monthTrend !== 0 && (
+                    <s-text color="subdued">
+                      {" "}
+                      ({kpi.monthTrend > 0 ? "+" : ""}
+                      {kpi.monthTrend}%)
+                    </s-text>
+                  )}
+                </s-heading>
+              </s-stack>
+            </s-box>
+          </div>
+        </s-grid>
       </s-section>
 
       {/* TOP PRODUCTS */}
-      <s-section heading="Top Reviewed Products">
+      <s-section padding="none">
+        <s-box padding="small">
+          <s-heading>Top Reviewed Products</s-heading>
+        </s-box>
         {topProducts.length === 0 ? (
           <s-box padding="large">
             <s-text color="subdued">
@@ -251,7 +255,10 @@ export default function DashboardIndex() {
       </s-section>
 
       {/* RECENT REVIEWS */}
-      <s-section heading="Recent Reviews">
+      <s-section padding="none">
+        <s-box padding="small">
+          <s-heading>Recent Reviews</s-heading>
+        </s-box>
         {recentReviews.length === 0 ? (
           <s-box padding="large">
             <s-text color="subdued">
