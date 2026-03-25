@@ -37,3 +37,8 @@ scopes = "write_products,read_products,read_orders"
 
 [auth]
 redirect_urls = [ "https://bolt-reviews.onrender.com/api/auth" ]
+
+[app_proxy]
+url = "https://bolt-reviews.onrender.com/api/public"
+subpath = "bolt-reviews"
+prefix = "apps"

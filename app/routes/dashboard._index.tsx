@@ -5,8 +5,35 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
+
+  // Sync app URL to shop metafield in the background
+  // This ensures the theme app extension always has the correct URL to fetch from
+  admin.graphql(`query { shop { id } }`).then(async (shopResponse: any) => {
+    const shopData = await shopResponse.json();
+    const shopGid = shopData.data?.shop?.id;
+    
+    if (shopGid && process.env.SHOPIFY_APP_URL) {
+      await admin.graphql(`
+        mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+          metafieldsSet(metafields: $metafields) {
+            userErrors { message }
+          }
+        }
+      `, {
+        variables: {
+          metafields: [{
+            ownerId: shopGid,
+            namespace: "bolt_reviews",
+            key: "app_url",
+            value: process.env.SHOPIFY_APP_URL,
+            type: "url"
+          }]
+        }
+      });
+    }
+  }).catch((e: any) => console.error("Error setting app_url metafield:", e));
 
   // Get current date boundaries for "this month" stats
   const now = new Date();
@@ -324,9 +351,9 @@ export default function DashboardIndex() {
 
 export function ErrorBoundary() {
   return (
-    <s-page title="Dashboard">
-      <s-box padding="400" background="white" border="1px solid #dfe3e8" borderRadius="200">
-        <s-text variant="headingLg" color="critical">Dashboard Unavailable</s-text>
+    <s-page heading="Dashboard">
+      <s-box padding="base">
+        <s-text color="subdued">Dashboard Unavailable</s-text>
         <div style={{ marginTop: '16px' }}>
           <p>The dashboard failed to load. Please try refreshing.</p>
         </div>

@@ -4,24 +4,22 @@ import prisma from "../db.server";
 import { updateProductStats } from "../utils/product-stats.server";
 
 /**
- * CSV Import Format:
+ * CSV Import — uses explicit field mapping sent from client.
  *
- * Required Headers:
- * - Product Handle: The product URL handle (e.g., "my-product-name")
- * - Customer Name: Name of the reviewer
- * - Rating: Number between 1-5
- * - Review Title: Short review headline
- * - Review Content: Full review text
- *
- * Optional Headers:
- * - Customer Email: Reviewer's email address
- * - Status: "pending", "published", or "rejected" (default: auto based on settings)
- * - Verified Purchase: "Yes" or "No" (default: No)
- * - Helpful Votes: Number of helpful votes (default: 0)
- * - Not Helpful Votes: Number of not helpful votes (default: 0)
- * - Image URL: URL to review image
- *
- * Note: Product must exist in database before importing reviews
+ * Required form fields:
+ *   file    — the .csv file
+ *   mapping — JSON string like:
+ *     {
+ *       "rating":       "Rating",         // CSV column for rating (1-5)
+ *       "handle":       "handle",         // CSV column for product handle
+ *       "author":       "Customer Name",  // CSV column for customer name
+ *       "email":        "Customer Email", // (optional) CSV column for email
+ *       "title":        "Review Title",   // (optional)
+ *       "content":      "content",        // (optional)
+ *       "images":       "images",         // (optional) image URL(s)
+ *       "created_at":   "Created At",     // (optional)
+ *       "country_code": "country_code"    // (optional, stored but unused)
+ *     }
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {
@@ -33,6 +31,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File;
+    const mappingRaw = formData.get("mapping") as string | null;
 
     if (!file) {
       return Response.json({ error: "No file provided" }, { status: 400 });
@@ -45,69 +44,81 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    // Parse explicit field mapping from client
+    let fieldMapping: Record<string, string> = {};
+    if (mappingRaw) {
+      try {
+        fieldMapping = JSON.parse(mappingRaw);
+      } catch {
+        return Response.json(
+          { error: "Invalid mapping configuration." },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Validate required fields are mapped
+    const requiredFields = ["rating", "handle", "author"];
+    const missingFields = requiredFields.filter((f) => !fieldMapping[f]);
+    if (missingFields.length > 0) {
+      const labels: Record<string, string> = {
+        rating: "Rating",
+        handle: "Product Handle",
+        author: "Author",
+      };
+      return Response.json(
+        {
+          error: `Required fields not mapped: ${missingFields.map((f) => labels[f]).join(", ")}. Please go back and map all required fields.`,
+        },
+        { status: 400 },
+      );
+    }
+
     // Read file content
     const content = await file.text();
     const lines = content.split("\n").filter((line) => line.trim());
 
     if (lines.length < 2) {
       return Response.json(
-        { error: "CSV file is empty or invalid" },
+        { error: "CSV file is empty or has no data rows." },
         { status: 400 },
       );
     }
 
-    // Map competitor headers to our expected format
-    const headerMapping: Record<string, string> = {
-      // Judge.me
-      "product_handle": "Product Handle",
-      "reviewer_name": "Customer Name",
-      "reviewer_email": "Customer Email",
-      "rating": "Rating",
-      "title": "Review Title",
-      "body": "Review Content",
-      "picture_urls": "Image URL",
-      "review_date": "Created At",
-      // Loox
-      "author": "Customer Name",
-      "email": "Customer Email",
-      "photo_url": "Image URL",
-      "created_at": "Created At",
-      // Yotpo
-      "product_url": "Product Handle", // Custom mapping logic might be needed to extract handle from URL
-      "display_name": "Customer Name",
-      "review_score": "Rating",
-    };
-
-    // Parse CSV
-    let headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-    
-    // Normalize headers based on mapping
-    headers = headers.map(h => {
-      const normalized = h.toLowerCase();
-      return headerMapping[normalized] || h;
-    });
-
+    // Parse CSV headers
+    const headers = parseCSVRow(lines[0]).map((h) =>
+      h.trim().replace(/^"|"$/g, ""),
+    );
     const rows = lines.slice(1);
 
-    // Validate required headers
-    const requiredHeaders = [
-      "Product Handle",
-      "Customer Name",
-      "Rating",
-      "Review Title",
-      "Review Content",
-    ];
-
-    const missingHeaders = requiredHeaders.filter((h) => !headers.includes(h));
-
-    if (missingHeaders.length > 0) {
-      return Response.json(
-        {
-          error: `Missing required headers: ${missingHeaders.join(", ")}. Uploaded headers: ${headers.join(", ")}`,
-        },
-        { status: 400 },
-      );
+    // Build column-index lookup from the field mapping
+    // fieldMapping[appField] = csvColumnName
+    const colIndex: Record<string, number> = {};
+    for (const [appField, csvCol] of Object.entries(fieldMapping)) {
+      const idx = headers.indexOf(csvCol);
+      colIndex[appField] = idx; // -1 if column not found (optional fields)
     }
+
+    // Validate that required columns exist in the CSV
+    for (const req of requiredFields) {
+      if (colIndex[req] === -1) {
+        return Response.json(
+          {
+            error: `Mapped column "${fieldMapping[req]}" not found in CSV. Please re-check your mapping.`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const get = (
+      row: string[],
+      appField: string,
+    ): string | undefined => {
+      const idx = colIndex[appField];
+      if (idx === undefined || idx === -1) return undefined;
+      return row[idx]?.trim() || undefined;
+    };
 
     let importedCount = 0;
     let skippedCount = 0;
@@ -115,62 +126,77 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     for (let i = 0; i < rows.length; i++) {
       try {
-        const row = rows[i];
-        const values = parseCSVRow(row);
+        const values = parseCSVRow(rows[i]);
 
-        if (values.length !== headers.length) {
-          skippedCount++;
-          errors.push(`Row ${i + 2}: Column count mismatch`);
-          continue;
-        }
+        // Skip empty rows
+        if (values.every((v) => !v.trim())) continue;
 
-        // Map values to object
-        const reviewData: Record<string, string> = {};
-        headers.forEach((header, index) => {
-          reviewData[header] = values[index];
-        });
-
-        // Validate rating
-        const rating = parseInt(reviewData["Rating"]);
+        // Rating
+        const ratingStr = get(values, "rating") || "";
+        const rating = parseInt(ratingStr);
         if (isNaN(rating) || rating < 1 || rating > 5) {
           skippedCount++;
-          errors.push(`Row ${i + 2}: Invalid rating (must be 1-5)`);
+          errors.push(`Row ${i + 2}: Invalid rating "${ratingStr}" (must be 1-5)`);
           continue;
         }
 
+        // Product handle
+        let productHandle = get(values, "handle") || "";
+        // Extract handle if full URL provided (Yotpo style)
+        if (productHandle.includes("/products/")) {
+          productHandle =
+            productHandle.split("/products/").pop()?.split("?")[0] ||
+            productHandle;
+        }
+        if (!productHandle) {
+          skippedCount++;
+          errors.push(`Row ${i + 2}: Missing product handle`);
+          continue;
+        }
+
+        // Customer name
+        const customerName = get(values, "author") || "Anonymous";
+
+        // Optional fields
+        const customerEmail = get(values, "email") || null;
+        const title = get(values, "title") || "(No title)";
+        const content = get(values, "content") || "";
+
+        // Date
         let createdAtDate = new Date();
-        if (reviewData["Created At"]) {
-          const parsedDate = new Date(reviewData["Created At"]);
-          if (!isNaN(parsedDate.getTime())) {
-            createdAtDate = parsedDate;
+        const createdAtStr = get(values, "created_at");
+        if (createdAtStr) {
+          const parsed = new Date(createdAtStr);
+          if (!isNaN(parsed.getTime())) createdAtDate = parsed;
+        }
+
+        // Images — support comma-separated URLs or JSON array format
+        const rawImages = get(values, "images") || "";
+        const imageUrls: string[] = [];
+        if (rawImages) {
+          // Try JSON array first  ["url1","url2"]
+          if (rawImages.trim().startsWith("[")) {
+            try {
+              const arr = JSON.parse(rawImages);
+              if (Array.isArray(arr)) imageUrls.push(...arr.filter(Boolean));
+            } catch {
+              // Fallback to comma-separated
+              imageUrls.push(
+                ...rawImages.split(",").map((u) => u.trim().replace(/^"|"$/g, "")).filter(Boolean),
+              );
+            }
+          } else {
+            imageUrls.push(
+              ...rawImages.split(",").map((u) => u.trim().replace(/^"|"$/g, "")).filter(Boolean),
+            );
           }
         }
+        const imageUrl = imageUrls[0] || null;
+        const images = imageUrls;
 
-        // Handle image URLs (Judge.me might provide comma-separated URLs)
-        const rawImageUrl = reviewData["Image URL"] || null;
-        let imageUrl = null;
-        const images: string[] = [];
-        
-        if (rawImageUrl) {
-          const urls = rawImageUrl.split(',').map(url => url.trim().replace(/^"|"$/g, ""));
-          if (urls.length > 0) {
-            imageUrl = urls[0];
-            images.push(...urls);
-          }
-        }
-
-        let productHandle = reviewData["Product Handle"];
-        // Extract handle if Yotpo format (URL instead of handle)
-        if (productHandle.includes('/products/')) {
-          productHandle = productHandle.split('/products/').pop()?.split('?')[0] || productHandle;
-        }
-
-        // Find product by handle
+        // Find product
         const product = await prisma.product.findFirst({
-          where: {
-            handle: productHandle,
-            shopId: session.shop,
-          },
+          where: { handle: productHandle, shopId: session.shop },
         });
 
         if (!product) {
@@ -181,7 +207,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           continue;
         }
 
-        // Get settings to determine default status
+        // Determine status
         const settings = await prisma.settings.findUnique({
           where: { shopId: session.shop },
         });
@@ -194,31 +220,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           status = "published";
         }
 
-        // Override status if provided in CSV
-        if (reviewData["Status"]) {
-          const csvStatus = reviewData["Status"].toLowerCase();
-          if (["pending", "published", "rejected"].includes(csvStatus)) {
-            status = csvStatus;
-          }
-        }
-
         // Create review
         await prisma.review.create({
           data: {
             productId: product.id,
             shopId: session.shop,
-            customerName: reviewData["Customer Name"],
-            customerEmail: reviewData["Customer Email"] || null,
+            customerName,
+            customerEmail,
             rating,
-            title: reviewData["Review Title"],
-            content: reviewData["Review Content"],
+            title,
+            content,
             status,
-            isVerified:
-              reviewData["Verified Purchase"]?.toLowerCase() === "yes" ||
-              reviewData["Verified Purchase"]?.toLowerCase() === "true" ||
-              reviewData["verified"]?.toLowerCase() === "true", // Some formats use 'verified'
-            helpful: parseInt(reviewData["Helpful Votes"] || "0") || 0,
-            notHelpful: parseInt(reviewData["Not Helpful Votes"] || "0") || 0,
+            isVerified: false,
+            helpful: 0,
+            notHelpful: 0,
             imageUrl,
             images,
             createdAt: createdAtDate,
@@ -227,7 +242,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         importedCount++;
 
-        // Update product stats if published
         if (status === "published") {
           await updateProductStats(product.id);
         }
@@ -242,7 +256,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       message: `Import complete. Imported ${importedCount} reviews, skipped ${skippedCount}.`,
       imported: importedCount,
       skipped: skippedCount,
-      errors: errors.slice(0, 10), // Return first 10 errors
+      errors: errors.slice(0, 10),
       totalErrors: errors.length,
     });
   } catch (error) {
@@ -257,7 +271,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
-// Helper function to parse CSV row (handles quoted values with commas)
+// Helper: parse one CSV row (handles quoted values with commas)
 function parseCSVRow(row: string): string[] {
   const values: string[] = [];
   let current = "";
@@ -273,11 +287,9 @@ function parseCSVRow(row: string): string[] {
         current += '"';
         i++;
       } else {
-        // Toggle quote mode
         inQuotes = !inQuotes;
       }
     } else if (char === "," && !inQuotes) {
-      // End of field
       values.push(current.trim());
       current = "";
     } else {
@@ -285,10 +297,6 @@ function parseCSVRow(row: string): string[] {
     }
   }
 
-  // Add last field
   values.push(current.trim());
-
   return values;
 }
-
-
