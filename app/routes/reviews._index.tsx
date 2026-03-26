@@ -497,11 +497,37 @@ export default function ReviewsIndex() {
     return review?.status === "published";
   }).length;
 
-  const handleExport = () => {
-    window.open("/api/reviews/export", "_blank");
+  const handleExport = async () => {
     const shopify = (window as any).shopify;
     if (shopify?.toast?.show) {
       shopify.toast.show("Exporting reviews...");
+    }
+
+    try {
+      const productId = searchParams.get("productId");
+      const url = productId ? `/api/reviews/export?productId=${productId}` : "/api/reviews/export";
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Export failed");
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      const tstamp = new Date().toISOString().split("T")[0];
+      a.download = productId ? `reviews-product-${tstamp}.csv` : `reviews-all-${tstamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      a.remove();
+      
+      if (shopify?.toast?.show) {
+        shopify.toast.show("Export downloaded!");
+      }
+    } catch (e) {
+      if (shopify?.toast?.show) {
+        shopify.toast.show("Failed to export reviews", { isError: true });
+      }
     }
   };
   // Import click handled natively by label
