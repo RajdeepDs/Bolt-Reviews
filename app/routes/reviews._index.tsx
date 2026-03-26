@@ -485,13 +485,14 @@ export default function ReviewsIndex() {
   }, [navigation.state]);
 
   // Count how many selected reviews are pending
-  const selectedPendingCount = selectedReviews.filter((id) => {
+  // Count how many selected reviews can be published (pending or rejected)
+  const publishableCount = selectedReviews.filter((id) => {
     const review = reviews.find((r) => r.id === id);
-    return review?.status === "pending";
+    return review && review.status !== "published";
   }).length;
 
-  // Count how many selected reviews are published
-  const selectedPublishedCount = selectedReviews.filter((id) => {
+  // Count how many selected reviews can be unpublished (published)
+  const unpublishableCount = selectedReviews.filter((id) => {
     const review = reviews.find((r) => r.id === id);
     return review?.status === "published";
   }).length;
@@ -718,7 +719,9 @@ export default function ReviewsIndex() {
 
   return (
     <s-page heading="My Reviews" inlineSize="base">
-      <s-button slot="primary-action" commandFor="import-modal">Import reviews (CSV)</s-button>
+      {selectedReviews.length === 0 && (
+        <s-button slot="primary-action" commandFor="import-modal">Import reviews (CSV)</s-button>
+      )}
       <s-modal
         id="import-modal"
         // @ts-expect-error web component ref
@@ -890,9 +893,11 @@ export default function ReviewsIndex() {
           </s-stack>
         )}
       </s-modal>
-      <s-button slot="secondary-actions" commandFor="more-actions-id">
-        More actions
-      </s-button>
+      {selectedReviews.length === 0 && (
+        <s-button slot="secondary-actions" commandFor="more-actions-id">
+          More actions
+        </s-button>
+      )}
       <s-menu id="more-actions-id">
         <s-button onClick={handleExport}>Export reviews (CSV)</s-button>
         <s-button
@@ -901,15 +906,27 @@ export default function ReviewsIndex() {
           Download CSV Template
         </s-button>
       </s-menu>
+
+      {/* ── BULK ACTIONS ── */}
       {selectedReviews.length > 0 && (
         <>
-          {selectedPendingCount > 0 && (
+          {publishableCount > 0 && (
             <s-button
               slot="primary-action"
               onClick={() => handleBulkAction("publish")}
               disabled={isSubmitting}
             >
-              Publish ({selectedPendingCount})
+              Publish ({publishableCount})
+            </s-button>
+          )}
+
+          {unpublishableCount > 0 && (
+            <s-button
+              slot={publishableCount > 0 ? "secondary-actions" : "primary-action"}
+              onClick={() => handleBulkAction("unpublish")}
+              disabled={isSubmitting}
+            >
+              Unpublish ({unpublishableCount})
             </s-button>
           )}
 
@@ -919,21 +936,8 @@ export default function ReviewsIndex() {
             onClick={() => handleBulkAction("delete")}
             disabled={isSubmitting}
           >
-            Delete
+            Delete ({selectedReviews.length})
           </s-button>
-          {selectedPublishedCount > 0 && (
-            <s-button
-              slot={
-                selectedPendingCount > 0
-                  ? "secondary-actions"
-                  : "primary-action"
-              }
-              onClick={() => handleBulkAction("unpublish")}
-              disabled={isSubmitting}
-            >
-              Unpublish ({selectedPublishedCount})
-            </s-button>
-          )}
         </>
       )}
       {/* Product filter chip */}
@@ -1034,10 +1038,15 @@ export default function ReviewsIndex() {
                 <s-table-row key={review.id}>
                   {/* CHECKBOX */}
                   <s-table-cell>
-                    <s-checkbox
-                      checked={selectedReviews.includes(review.id)}
-                      onInput={() => toggleReview(review.id)}
-                    />
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <s-checkbox
+                        checked={selectedReviews.includes(review.id)}
+                        onInput={(e: any) => {
+                          e.stopPropagation();
+                          toggleReview(review.id);
+                        }}
+                      />
+                    </div>
                   </s-table-cell>
 
                   {/* CUSTOMER */}
