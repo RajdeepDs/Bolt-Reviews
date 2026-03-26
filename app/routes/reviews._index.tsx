@@ -325,15 +325,15 @@ export default function ReviewsIndex() {
 
   // App fields definition
   const APP_FIELDS = [
-    { key: "rating",       label: "Rating",         required: true,  desc: "Score from 1–5" },
-    { key: "handle",       label: "Product Handle",  required: true,  desc: "Product URL handle (e.g. my-product)" },
-    { key: "author",       label: "Author",          required: true,  desc: "Customer name" },
-    { key: "email",        label: "Email",           required: false, desc: "Customer email address" },
-    { key: "title",        label: "Review Title",    required: false, desc: "Short review headline" },
-    { key: "content",      label: "Content",         required: false, desc: "Full review text" },
-    { key: "images",       label: "Images",          required: false, desc: "Image URL(s), comma-separated" },
-    { key: "created_at",   label: "Created At",      required: false, desc: "Date the review was created" },
-    { key: "country_code", label: "Country Code",    required: false, desc: "2-letter country code" },
+    { key: "rating", label: "Rating", required: true, desc: "Score from 1–5" },
+    { key: "handle", label: "Product Handle", required: true, desc: "Product URL handle (e.g. my-product)" },
+    { key: "author", label: "Author", required: true, desc: "Customer name" },
+    { key: "email", label: "Email", required: false, desc: "Customer email address" },
+    { key: "title", label: "Review Title", required: false, desc: "Short review headline" },
+    { key: "content", label: "Content", required: false, desc: "Full review text" },
+    { key: "images", label: "Images", required: false, desc: "Image URL(s), comma-separated" },
+    { key: "created_at", label: "Created At", required: false, desc: "Date the review was created" },
+    { key: "country_code", label: "Country Code", required: false, desc: "2-letter country code" },
   ] as const;
   type AppFieldKey = typeof APP_FIELDS[number]["key"];
 
@@ -607,9 +607,14 @@ export default function ReviewsIndex() {
       customerName: review.customerName,
       customerEmail: review.customerEmail || "",
     });
+    // Click the hidden trigger button — commandFor is the reliable Shopify way to open s-modal
+    setTimeout(() => {
+      (document.getElementById("review-detail-modal-trigger") as HTMLButtonElement)?.click();
+    }, 0);
   };
 
   const closeReviewDetail = () => {
+    (document.getElementById("review-detail-modal") as any)?.hidePopover?.();
     setSelectedReview(null);
   };
 
@@ -1049,50 +1054,58 @@ export default function ReviewsIndex() {
 
                   {/* TITLE */}
                   <s-table-cell>
-                    <s-stack gap="small">
+                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
                       <s-text>{review.title || "(No title)"}</s-text>
-                    </s-stack>
+                    </div>
                   </s-table-cell>
 
                   {/* RATING */}
                   <s-table-cell>
-                    <s-text>{"⭐".repeat(review.rating)}</s-text>
+                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                      <s-text>{"⭐".repeat(review.rating)}</s-text>
+                    </div>
                   </s-table-cell>
 
                   {/* PRODUCT */}
                   <s-table-cell>
-                    <s-stack direction="inline" gap="small" alignItems="center">
-                      {review.product.imageUrl && (
-                        <s-thumbnail
-                          src={review.product.imageUrl}
-                          alt={review.product.title}
-                          size="small"
-                        />
-                      )}
-                      <s-text>{review.product.title}</s-text>
-                    </s-stack>
+                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                      <s-stack direction="inline" gap="small" alignItems="center">
+                        {review.product.imageUrl && (
+                          <s-thumbnail
+                            src={review.product.imageUrl}
+                            alt={review.product.title}
+                            size="small"
+                          />
+                        )}
+                        <s-text>{review.product.title}</s-text>
+                      </s-stack>
+                    </div>
                   </s-table-cell>
 
                   {/* DATE */}
                   <s-table-cell>
-                    <s-text>{formatDate(review.createdAt.toString())}</s-text>
+                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                      <s-text>{formatDate(review.createdAt.toString())}</s-text>
+                    </div>
                   </s-table-cell>
 
                   {/* STATUS */}
                   <s-table-cell>
-                    <s-badge
-                      tone={
-                        review.status === "published"
-                          ? "success"
-                          : review.status === "rejected"
-                            ? "critical"
-                            : "warning"
-                      }
-                    >
-                      {review.status
-                        ? review.status.charAt(0).toUpperCase() + review.status.slice(1)
-                        : "Pending"}
-                    </s-badge>
+                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                      <s-badge
+                        tone={
+                          review.status === "published"
+                            ? "success"
+                            : review.status === "rejected"
+                              ? "critical"
+                              : "warning"
+                        }
+                      >
+                        {review.status
+                          ? review.status.charAt(0).toUpperCase() + review.status.slice(1)
+                          : "Pending"}
+                      </s-badge>
+                    </div>
                   </s-table-cell>
                 </s-table-row>
               ))
@@ -1136,17 +1149,19 @@ export default function ReviewsIndex() {
         )}
       </s-section>
 
-      {/* REVIEW DETAIL MODAL */}
-      {selectedReview && (
-        <s-modal
-          id="review-detail-modal"
-          // @ts-expect-error Shopify web component supports open attribute
-          open
-          onClose={closeReviewDetail}
-          variant="base"
-        >
-          <s-text slot="title">Review Details</s-text>
+      {/* Hidden trigger button — commandFor is the reliable Shopify way to open s-modal */}
+      <div style={{ display: "none" }}>
+        <s-button id="review-detail-modal-trigger" commandFor="review-detail-modal">Open</s-button>
+      </div>
 
+      {/* REVIEW DETAIL MODAL — always mounted; opened via showPopover() */}
+      <s-modal
+        id="review-detail-modal"
+        heading="Review Details"
+        // @ts-expect-error web component props not in type definitions
+        onClose={closeReviewDetail}
+      >
+        {selectedReview && (<>
           <s-box padding="base">
             <s-stack gap="large">
               {/* Review images */}
@@ -1208,72 +1223,98 @@ export default function ReviewsIndex() {
 
               <s-divider />
 
-              {/* Customer Name */}
-              <s-text-field
-                label="Customer Name"
-                value={editForm.customerName}
-                onInput={(e: any) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    customerName: e.target.value,
-                  }))
-                }
-              />
+              {/* Customer Name + Email — side by side */}
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ flex: 1 }}>
+                  <s-text-field
+                    label="Customer Name"
+                    value={editForm.customerName}
+                    onInput={(e: any) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        customerName: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <s-text-field
+                    label="Customer Email"
+                    value={editForm.customerEmail}
+                    placeholder="No email provided"
+                    onInput={(e: any) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        customerEmail: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
 
-              {/* Customer Email */}
-              <s-text-field
-                label="Customer Email"
-                value={editForm.customerEmail}
-                placeholder="No email provided"
-                onInput={(e: any) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    customerEmail: e.target.value,
-                  }))
-                }
-              />
-
-              {/* Rating */}
-              <s-stack gap="small">
-                <s-text><strong>Rating</strong></s-text>
-                <s-select
-                  label="Rating"
-                  labelAccessibilityVisibility="exclusive"
-                  value={String(editForm.rating)}
-                  onInput={(e: any) =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      rating: parseInt(e.target.value),
-                    }))
-                  }
-                >
-                  <option value="5">⭐⭐⭐⭐⭐ (5 stars)</option>
-                  <option value="4">⭐⭐⭐⭐ (4 stars)</option>
-                  <option value="3">⭐⭐⭐ (3 stars)</option>
-                  <option value="2">⭐⭐ (2 stars)</option>
-                  <option value="1">⭐ (1 star)</option>
-                </s-select>
-              </s-stack>
-
-              {/* Status */}
-              <s-stack gap="small">
-                <s-text><strong>Status</strong></s-text>
-                <s-select
-                  label="Status"
-                  labelAccessibilityVisibility="exclusive"
-                  value={editForm.status}
-                  onInput={(e: any) =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      status: e.target.value,
-                    }))
-                  }
-                >
-                  <option value="pending">Pending</option>
-                  <option value="published">Published</option>
-                  <option value="rejected">Rejected</option>
-                </s-select>
-              </s-stack>
+              {/* Rating + Status — side by side */}
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div style={{ flex: 1 }}>
+                  <s-text><strong>Rating</strong></s-text>
+                  <select
+                    value={String(editForm.rating)}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        rating: parseInt(e.target.value),
+                      }))
+                    }
+                    style={{
+                      width: "100%",
+                      marginTop: "4px",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--s-color-border, #ccc)",
+                      fontSize: "14px",
+                      fontFamily: "inherit",
+                      background: "var(--s-color-bg-surface, #fff)",
+                      color: "inherit",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="5">5 stars</option>
+                    <option value="4">4 stars</option>
+                    <option value="3">3 stars</option>
+                    <option value="2">2 stars</option>
+                    <option value="1">1 star</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <s-text><strong>Status</strong></s-text>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        status: e.target.value,
+                      }))
+                    }
+                    style={{
+                      width: "100%",
+                      marginTop: "4px",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--s-color-border, #ccc)",
+                      fontSize: "14px",
+                      fontFamily: "inherit",
+                      background: "var(--s-color-bg-surface, #fff)",
+                      color: "inherit",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="published">Published</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
 
               {/* Title */}
               <s-text-field
@@ -1307,79 +1348,21 @@ export default function ReviewsIndex() {
                     fontFamily: "inherit",
                     fontSize: "inherit",
                     resize: "vertical",
+                    boxSizing: "border-box",
                   }}
                 />
               </s-stack>
 
               {/* Verified badge */}
               {selectedReview.isVerified && (
-                <s-badge tone="info">✓ Verified Purchase</s-badge>
+                <s-badge tone="info">Verified Purchase</s-badge>
               )}
 
-              {/* Helpful counts */}
-              <s-stack direction="inline" gap="base">
-                <s-text color="subdued">
-                  👍 {selectedReview.helpful} helpful
-                </s-text>
-                <s-text color="subdued">
-                  👎 {selectedReview.notHelpful} not helpful
-                </s-text>
-              </s-stack>
 
-              <s-divider />
-
-              {/* Merchant Reply */}
-              <s-stack gap="small">
-                <s-text><strong>Merchant Reply</strong></s-text>
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  rows={3}
-                  placeholder="Write a reply to this review..."
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--s-color-border, #ccc)",
-                    fontFamily: "inherit",
-                    fontSize: "inherit",
-                    resize: "vertical",
-                  }}
-                />
-                <s-stack direction="inline" gap="small">
-                  <s-button
-                    variant="secondary"
-                    onClick={handleSaveReply}
-                    disabled={replyFetcher.state !== "idle"}
-                  >
-                    {replyFetcher.state !== "idle"
-                      ? "Saving reply..."
-                      : selectedReview.merchantReply
-                        ? "Update Reply"
-                        : "Save Reply"}
-                  </s-button>
-                  {replyText && (
-                    <s-button
-                      variant="tertiary"
-                      onClick={() => {
-                        setReplyText("");
-                        handleSaveReply();
-                      }}
-                    >
-                      Remove Reply
-                    </s-button>
-                  )}
-                </s-stack>
-                {selectedReview.merchantReplyAt && (
-                  <s-text color="subdued">
-                    Last replied: {formatDate(selectedReview.merchantReplyAt.toString())}
-                  </s-text>
-                )}
-              </s-stack>
             </s-stack>
           </s-box>
 
-          <s-box slot="footer" padding="base">
+          <s-box slot="footer">
             <s-stack
               direction="inline"
               gap="base"
@@ -1397,8 +1380,8 @@ export default function ReviewsIndex() {
               </s-button>
             </s-stack>
           </s-box>
-        </s-modal>
-      )}
+        </>)}
+      </s-modal>
     </s-page>
   );
 }
