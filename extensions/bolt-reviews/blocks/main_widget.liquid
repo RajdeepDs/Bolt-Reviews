@@ -154,6 +154,12 @@
   </div>
 </dialog>
 
+<!-- Image Lightbox -->
+<div id="widget-image-lightbox" class="widget-image-lightbox">
+  <span class="lightbox-close">&times;</span>
+  <img class="lightbox-content" id="lightbox-img">
+</div>
+
 <!-- Review Item Template -->
 <template id="widget-review-template">
   <div class="review-item" data-review-id="">
@@ -214,7 +220,6 @@
     align-items: center;
     justify-content: space-between;
     padding: 1.5rem;
-    border: 2px solid #4285F4; /* Highlight outline matching screenshot 2 */
     border-radius: 8px;
     background: #fff;
     margin-bottom: 1.5rem;
@@ -458,6 +463,45 @@
     cursor: not-allowed;
   }
 
+  /* --- Lightbox --- */
+  .widget-image-lightbox {
+    position: fixed;
+    z-index: 999999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .widget-image-lightbox.open {
+    display: flex;
+  }
+  .lightbox-content {
+    display: block;
+    max-width: 90%;
+    max-height: 85vh;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  .lightbox-close:hover,
+  .lightbox-close:focus {
+    color: #fff;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
   /* --- Modal & Form CSS --- */
   .review-modal {
     padding: 0;
@@ -690,6 +734,16 @@
     const formMessage = document.getElementById('form-message');
     const submitBtn = document.getElementById('submit-btn');
 
+    // Lightbox Elements
+    const lightbox = document.getElementById('widget-image-lightbox');
+    const lightboxImg = document.getElementById('lightbox-img');
+    const lightboxClose = lightbox.querySelector('.lightbox-close');
+    
+    lightboxClose.onclick = () => lightbox.classList.remove('open');
+    lightbox.onclick = (e) => {
+      if (e.target !== lightboxImg) lightbox.classList.remove('open');
+    }
+
     let selectedFiles = [];
 
     async function init() {
@@ -806,8 +860,10 @@
             const imgEl = document.createElement('img');
             imgEl.className = 'review-photo';
             imgEl.src = url;
-            // A simple window open logic or lightbox could be connected here
-            imgEl.onclick = () => window.open(url, '_blank');
+            imgEl.onclick = () => {
+              lightboxImg.src = url;
+              lightbox.classList.add('open');
+            };
             pGrid.appendChild(imgEl);
           });
         }
