@@ -36,7 +36,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const shopDomain = url.searchParams.get("shopDomain");
   const rating = url.searchParams.get("rating");
   const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "10"), 50); // Max 50 per page
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "500"), 500); // Allow up to 500 per page for widget client-side pagination
 
   if (!shopifyProductId && !shopDomain) {
     let response = new Response(
