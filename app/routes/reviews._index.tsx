@@ -571,7 +571,7 @@ export default function ReviewsIndex() {
       setIsImporting(false);
 
       if (data.success) {
-        (document.getElementById("import-modal") as any)?.hidePopover?.();
+        (document.getElementById("import-modal-close") as HTMLButtonElement)?.click();
         resetImportModal();
         if (shopify?.toast?.show) {
           shopify.toast.show(data.message || "Reviews imported successfully");
@@ -615,7 +615,7 @@ export default function ReviewsIndex() {
   };
 
   const closeReviewDetail = () => {
-    (document.getElementById("review-detail-modal") as any)?.hidePopover?.();
+    (document.getElementById("review-detail-modal-close") as HTMLButtonElement)?.click();
     setSelectedReview(null);
   };
 
@@ -633,8 +633,13 @@ export default function ReviewsIndex() {
   };
 
   // Handle reply completion
+  const prevReplyState = useRef(replyFetcher.state);
   useEffect(() => {
-    if (replyFetcher.state === "idle" && replyFetcher.data) {
+    if (
+      prevReplyState.current !== "idle" &&
+      replyFetcher.state === "idle" &&
+      replyFetcher.data
+    ) {
       const data = replyFetcher.data as { success?: boolean; error?: string };
       const shopify = (window as any).shopify;
 
@@ -649,6 +654,7 @@ export default function ReviewsIndex() {
         }
       }
     }
+    prevReplyState.current = replyFetcher.state;
   }, [replyFetcher.state, replyFetcher.data, revalidator]);
 
   // Product filter clear
@@ -688,8 +694,13 @@ export default function ReviewsIndex() {
   };
 
   // Handle update completion
+  const prevUpdateState = useRef(updateFetcher.state);
   useEffect(() => {
-    if (updateFetcher.state === "idle" && updateFetcher.data) {
+    if (
+      prevUpdateState.current !== "idle" &&
+      updateFetcher.state === "idle" &&
+      updateFetcher.data
+    ) {
       const data = updateFetcher.data as {
         success?: boolean;
         message?: string;
@@ -711,6 +722,7 @@ export default function ReviewsIndex() {
         }
       }
     }
+    prevUpdateState.current = updateFetcher.state;
   }, [updateFetcher.state, updateFetcher.data, revalidator]);
 
   // Pagination info
@@ -1158,9 +1170,11 @@ export default function ReviewsIndex() {
         )}
       </s-section>
 
-      {/* Hidden trigger button — commandFor is the reliable Shopify way to open s-modal */}
+      {/* Hidden trigger buttons — commandFor is the reliable Shopify way to open and close s-modal */}
       <div style={{ display: "none" }}>
         <s-button id="review-detail-modal-trigger" commandFor="review-detail-modal">Open</s-button>
+        <s-button id="review-detail-modal-close" commandFor="review-detail-modal" command="--hide">Close</s-button>
+        <s-button id="import-modal-close" commandFor="import-modal" command="--hide">Close</s-button>
       </div>
 
       {/* REVIEW DETAIL MODAL — always mounted; opened via showPopover() */}
@@ -1395,18 +1409,7 @@ export default function ReviewsIndex() {
   );
 }
 
-export function ErrorBoundary() {
-  return (
-    <s-page heading="Reviews">
-      <s-box padding="base" borderRadius="base">
-        <s-text><strong>Error rendering Reviews</strong></s-text>
-        <div style={{ marginTop: '16px' }}>
-          <p>An unexpected error occurred while loading the reviews dashboard. Please try refreshing.</p>
-        </div>
-      </s-box>
-    </s-page>
-  );
-}
+
 
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);

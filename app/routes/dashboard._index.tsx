@@ -349,18 +349,7 @@ export default function DashboardIndex() {
   );
 }
 
-export function ErrorBoundary() {
-  return (
-    <s-page heading="Dashboard">
-      <s-box padding="base">
-        <s-text color="subdued">Dashboard Unavailable</s-text>
-        <div style={{ marginTop: '16px' }}>
-          <p>The dashboard failed to load. Please try refreshing.</p>
-        </div>
-      </s-box>
-    </s-page>
-  );
-}
+
 
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
