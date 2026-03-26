@@ -225,20 +225,30 @@ export default function SettingsIndex() {
                 <s-text>
                   <strong>Minimum rating to auto-publish</strong>
                 </s-text>
-                <s-select
-                  label="Minimum rating"
-                  labelAccessibilityVisibility="exclusive"
+                <select
                   value={String(formState.minRatingToPublish)}
-                  onInput={(e: any) =>
+                  onChange={(e) =>
                     updateField("minRatingToPublish", parseInt(e.target.value))
                   }
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--s-color-border, #ccc)",
+                    fontSize: "14px",
+                    fontFamily: "inherit",
+                    background: "var(--s-color-bg-surface, #fff)",
+                    color: "inherit",
+                    cursor: "pointer",
+                    boxSizing: "border-box",
+                  }}
                 >
                   <option value="1">1 star and above (all reviews)</option>
                   <option value="2">2 stars and above</option>
                   <option value="3">3 stars and above</option>
                   <option value="4">4 stars and above</option>
                   <option value="5">5 stars only</option>
-                </s-select>
+                </select>
                 <s-text color="subdued">
                   Reviews below this rating will be held for moderation.
                 </s-text>
