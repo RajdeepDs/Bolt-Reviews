@@ -537,6 +537,10 @@ export default function ReviewsIndex() {
     const formData = new FormData();
     formData.append("file", selectedFile);
     formData.append("mapping", JSON.stringify(fieldMapping));
+    const targetProductId = searchParams.get("productId");
+    if (targetProductId) {
+      formData.append("targetProductId", targetProductId);
+    }
 
     fetcher.submit(formData, {
       method: "post",

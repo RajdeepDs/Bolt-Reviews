@@ -44,6 +44,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    // Optional: target product to assign rows when their handle doesn't match
+    const targetProductId = formData.get("targetProductId") as string | null;
+
     // Parse explicit field mapping from client
     let fieldMapping: Record<string, string> = {};
     if (mappingRaw) {
@@ -194,17 +197,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const imageUrl = imageUrls[0] || null;
         const images = imageUrls;
 
-        // Find product
-        const product = await prisma.product.findFirst({
+        // Find product — first by handle, then fall back to the target product
+        let product = await prisma.product.findFirst({
           where: { handle: productHandle, shopId: session.shop },
         });
 
         if (!product) {
-          skippedCount++;
-          errors.push(
-            `Row ${i + 2}: Product with handle "${productHandle}" not found`,
-          );
-          continue;
+          // If a target product was explicitly specified, reassign to it
+          if (targetProductId) {
+            product = await prisma.product.findFirst({
+              where: { id: targetProductId, shopId: session.shop },
+            });
+          }
+          if (!product) {
+            skippedCount++;
+            errors.push(
+              `Row ${i + 2}: Product with handle "${productHandle}" not found. ` +
+              `Filter by the target product before importing to auto-assign unmatched rows.`,
+            );
+            continue;
+          }
         }
 
         // Determine status
