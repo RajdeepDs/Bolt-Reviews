@@ -56,9 +56,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       _count: { status: true },
     }),
 
-    // Overall average rating
+    // Overall average rating (all reviews)
     prisma.review.aggregate({
-      where: { shopId, status: "published" },
+      where: { shopId },
       _avg: { rating: true },
       _count: { id: true },
     }),
@@ -131,7 +131,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     kpi: {
-      averageRating: overallStats._avg.rating || 0,
+      averageRating: Number(overallStats._avg.rating ?? 0),
       totalReviews: counts.total,
       publishedReviews: counts.published,
       pendingReviews: counts.pending,
@@ -259,7 +259,7 @@ export default function DashboardIndex() {
                   </s-table-cell>
                   <s-table-cell>
                     <s-text>
-                      {product.averageRating.toFixed(1)} ⭐
+                      {Number(product.averageRating) > 0 ? `${Number(product.averageRating).toFixed(1)} ⭐` : "—"}
                     </s-text>
                   </s-table-cell>
                   <s-table-cell>
