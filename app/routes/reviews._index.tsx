@@ -506,10 +506,10 @@ export default function ReviewsIndex() {
     try {
       const productId = searchParams.get("productId");
       const url = productId ? `/api/reviews/export?productId=${productId}` : "/api/reviews/export";
-      
+
       const response = await fetch(url);
       if (!response.ok) throw new Error("Export failed");
-      
+
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -520,7 +520,7 @@ export default function ReviewsIndex() {
       a.click();
       window.URL.revokeObjectURL(downloadUrl);
       a.remove();
-      
+
       if (shopify?.toast?.show) {
         shopify.toast.show("Export downloaded!");
       }
@@ -995,206 +995,235 @@ export default function ReviewsIndex() {
         </s-section>
       )}
 
-      <s-section padding="none">
-        {/* FILTER BUTTONS + SORT */}
-        <s-table>
-          <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
-            <s-stack direction="inline" gap="small-200">
-              <s-button
-                variant={currentFilter === "all" ? "secondary" : "tertiary"}
-                onClick={() => setFilter("all")}
-              >
-                All ({counts.all})
-              </s-button>
-              <s-button
-                variant={currentFilter === "low" ? "secondary" : "tertiary"}
-                onClick={() => setFilter("low")}
-              >
-                Low ratings (≤3★)
-              </s-button>
-              <s-button
-                variant={
-                  currentFilter === "pending" ? "secondary" : "tertiary"
-                }
-                onClick={() => setFilter("pending")}
-              >
-                Pending ({counts.pending})
-              </s-button>
-            </s-stack>
-            <s-text-field
-              label="Search reviews"
-              labelAccessibilityVisibility="exclusive"
-              icon="search"
-              placeholder="Search all reviews"
-              value={searchQuery}
-              onInput={(e: any) => handleSearchChange(e.target?.value || "")}
+      {counts.all === 0 ? (
+        <s-section>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "48px 24px",
+              textAlign: "center",
+            }}
+          >
+            <img
+              src="/empty-state.svg"
+              alt="No reviews yet"
+              style={{ width: "200px", height: "200px", marginBottom: "24px" }}
             />
-          </s-grid>
-          {/* TABLE HEADER */}
-          <s-table-header-row>
-            <s-table-header>
-              <s-checkbox
-                checked={
-                  selectedReviews.length === reviews.length &&
-                  reviews.length > 0
-                }
-                onInput={toggleSelectAll}
-              />
-            </s-table-header>
-            <s-table-header listSlot="primary">Customer</s-table-header>
-            <s-table-header>Title</s-table-header>
-            <s-table-header format="numeric">Rating</s-table-header>
-            <s-table-header>Product</s-table-header>
-            <s-table-header>Date</s-table-header>
-            <s-table-header listSlot="secondary">Status</s-table-header>
-          </s-table-header-row>
-
-          {/* TABLE BODY */}
-          <s-table-body>
-            {isLoading ? (
-              <s-table-row>
-                <s-table-cell>
-                  <s-box padding="large">
-                    <s-text>Loading reviews...</s-text>
-                  </s-box>
-                </s-table-cell>
-              </s-table-row>
-            ) : reviews.length === 0 ? (
-              <s-table-row>
-                <s-table-cell>
-                  <s-box padding="large">
-                    <s-text>
-                      {searchQuery || currentFilter !== "all"
-                        ? "No reviews found matching your filters"
-                        : "No reviews yet. Reviews will appear here once customers start leaving feedback."}
-                    </s-text>
-                  </s-box>
-                </s-table-cell>
-              </s-table-row>
-            ) : (
-              reviews.map((review) => (
-                <s-table-row key={review.id}>
-                  {/* CHECKBOX */}
-                  <s-table-cell>
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <s-checkbox
-                        checked={selectedReviews.includes(review.id)}
-                        onInput={(e: any) => {
-                          e.stopPropagation();
-                          toggleReview(review.id);
-                        }}
-                      />
-                    </div>
-                  </s-table-cell>
-
-                  {/* CUSTOMER */}
-                  <s-table-cell>
-                    <s-link
-                      onClick={(e: any) => {
-                        e.preventDefault();
-                        openReviewDetail(review);
-                      }}
-                    >
-                      {review.customerName}
-                    </s-link>
-                  </s-table-cell>
-
-                  {/* TITLE */}
-                  <s-table-cell>
-                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
-                      <s-text>{review.title || "(No title)"}</s-text>
-                    </div>
-                  </s-table-cell>
-
-                  {/* RATING */}
-                  <s-table-cell>
-                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
-                      <s-text>{"⭐".repeat(review.rating)}</s-text>
-                    </div>
-                  </s-table-cell>
-
-                  {/* PRODUCT */}
-                  <s-table-cell>
-                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
-                      <s-stack direction="inline" gap="small" alignItems="center">
-                        {review.product.imageUrl && (
-                          <s-thumbnail
-                            src={review.product.imageUrl}
-                            alt={review.product.title}
-                            size="small"
-                          />
-                        )}
-                        <s-text>{review.product.title}</s-text>
-                      </s-stack>
-                    </div>
-                  </s-table-cell>
-
-                  {/* DATE */}
-                  <s-table-cell>
-                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
-                      <s-text>{formatDate(review.createdAt.toString())}</s-text>
-                    </div>
-                  </s-table-cell>
-
-                  {/* STATUS */}
-                  <s-table-cell>
-                    <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
-                      <s-badge
-                        tone={
-                          review.status === "published"
-                            ? "success"
-                            : review.status === "rejected"
-                              ? "critical"
-                              : "warning"
-                        }
-                      >
-                        {review.status
-                          ? review.status.charAt(0).toUpperCase() + review.status.slice(1)
-                          : "Pending"}
-                      </s-badge>
-                    </div>
-                  </s-table-cell>
-                </s-table-row>
-              ))
-            )}
-          </s-table-body>
-        </s-table>
-
-        {/* PAGINATION */}
-        {totalPages > 1 && (
-          <s-box padding="base">
-            <s-stack
-              direction="inline"
-              gap="base"
-              alignItems="center"
-              justifyContent="space-between"
-            >
+            <s-heading>Your reviews will show here</s-heading>
+            <div style={{ marginTop: "8px", marginBottom: "24px", maxWidth: "400px" }}>
               <s-text color="subdued">
-                Showing {startItem}–{endItem} of {totalFiltered} reviews
+                This is where you'll manage all your product reviews. Import
+                existing reviews or wait for customers to start leaving feedback.
               </s-text>
-              <s-stack direction="inline" gap="small">
+            </div>
+            <s-button variant="primary" commandFor="import-modal">
+              Import reviews
+            </s-button>
+          </div>
+        </s-section>
+      ) : (
+        <s-section padding="none">
+          {/* FILTER BUTTONS + SORT */}
+          <s-table>
+            <s-grid slot="filters" gap="small-200" gridTemplateColumns="auto 1fr">
+              <s-stack direction="inline" gap="small-200">
                 <s-button
-                  variant="tertiary"
-                  onClick={() => goToPage(page - 1)}
-                  disabled={page <= 1}
+                  variant={currentFilter === "all" ? "secondary" : "tertiary"}
+                  onClick={() => setFilter("all")}
                 >
-                  ← Previous
+                  All ({counts.all})
                 </s-button>
-                <s-text>
-                  Page {page} of {totalPages}
-                </s-text>
                 <s-button
-                  variant="tertiary"
-                  onClick={() => goToPage(page + 1)}
-                  disabled={page >= totalPages}
+                  variant={currentFilter === "low" ? "secondary" : "tertiary"}
+                  onClick={() => setFilter("low")}
                 >
-                  Next →
+                  Low ratings (≤3★)
+                </s-button>
+                <s-button
+                  variant={
+                    currentFilter === "pending" ? "secondary" : "tertiary"
+                  }
+                  onClick={() => setFilter("pending")}
+                >
+                  Pending ({counts.pending})
                 </s-button>
               </s-stack>
-            </s-stack>
-          </s-box>
-        )}
-      </s-section>
+              <s-text-field
+                label="Search reviews"
+                labelAccessibilityVisibility="exclusive"
+                icon="search"
+                placeholder="Search all reviews"
+                value={searchQuery}
+                onInput={(e: any) => handleSearchChange(e.target?.value || "")}
+              />
+            </s-grid>
+            {/* TABLE HEADER */}
+            <s-table-header-row>
+              <s-table-header>
+                <s-checkbox
+                  checked={
+                    selectedReviews.length === reviews.length &&
+                    reviews.length > 0
+                  }
+                  onInput={toggleSelectAll}
+                />
+              </s-table-header>
+              <s-table-header listSlot="primary">Customer</s-table-header>
+              <s-table-header>Title</s-table-header>
+              <s-table-header format="numeric">Rating</s-table-header>
+              <s-table-header>Product</s-table-header>
+              <s-table-header>Date</s-table-header>
+              <s-table-header listSlot="secondary">Status</s-table-header>
+            </s-table-header-row>
+
+            {/* TABLE BODY */}
+            <s-table-body>
+              {isLoading ? (
+                <s-table-row>
+                  <s-table-cell>
+                    <s-box padding="large">
+                      <s-text>Loading reviews...</s-text>
+                    </s-box>
+                  </s-table-cell>
+                </s-table-row>
+              ) : reviews.length === 0 ? (
+                <s-table-row>
+                  <s-table-cell>
+                    <s-box padding="large">
+                      <s-text>
+                        No reviews found matching your filters
+                      </s-text>
+                    </s-box>
+                  </s-table-cell>
+                </s-table-row>
+              ) : (
+                reviews.map((review) => (
+                  <s-table-row key={review.id}>
+                    {/* CHECKBOX */}
+                    <s-table-cell>
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <s-checkbox
+                          checked={selectedReviews.includes(review.id)}
+                          onInput={(e: any) => {
+                            e.stopPropagation();
+                            toggleReview(review.id);
+                          }}
+                        />
+                      </div>
+                    </s-table-cell>
+
+                    {/* CUSTOMER */}
+                    <s-table-cell>
+                      <s-link
+                        onClick={(e: any) => {
+                          e.preventDefault();
+                          openReviewDetail(review);
+                        }}
+                      >
+                        {review.customerName}
+                      </s-link>
+                    </s-table-cell>
+
+                    {/* TITLE */}
+                    <s-table-cell>
+                      <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                        <s-text>{review.title || "(No title)"}</s-text>
+                      </div>
+                    </s-table-cell>
+
+                    {/* RATING */}
+                    <s-table-cell>
+                      <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                        <s-text>{"⭐".repeat(review.rating)}</s-text>
+                      </div>
+                    </s-table-cell>
+
+                    {/* PRODUCT */}
+                    <s-table-cell>
+                      <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                        <s-stack direction="inline" gap="small" alignItems="center">
+                          {review.product.imageUrl && (
+                            <s-thumbnail
+                              src={review.product.imageUrl}
+                              alt={review.product.title}
+                              size="small"
+                            />
+                          )}
+                          <s-text>{review.product.title}</s-text>
+                        </s-stack>
+                      </div>
+                    </s-table-cell>
+
+                    {/* DATE */}
+                    <s-table-cell>
+                      <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                        <s-text>{formatDate(review.createdAt.toString())}</s-text>
+                      </div>
+                    </s-table-cell>
+
+                    {/* STATUS */}
+                    <s-table-cell>
+                      <div style={{ cursor: "pointer" }} onClick={() => openReviewDetail(review)}>
+                        <s-badge
+                          tone={
+                            review.status === "published"
+                              ? "success"
+                              : review.status === "rejected"
+                                ? "critical"
+                                : "warning"
+                          }
+                        >
+                          {review.status
+                            ? review.status.charAt(0).toUpperCase() + review.status.slice(1)
+                            : "Pending"}
+                        </s-badge>
+                      </div>
+                    </s-table-cell>
+                  </s-table-row>
+                ))
+              )}
+            </s-table-body>
+          </s-table>
+
+          {/* PAGINATION */}
+          {totalPages > 1 && (
+            <s-box padding="base">
+              <s-stack
+                direction="inline"
+                gap="base"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <s-text color="subdued">
+                  Showing {startItem}–{endItem} of {totalFiltered} reviews
+                </s-text>
+                <s-stack direction="inline" gap="small">
+                  <s-button
+                    variant="tertiary"
+                    onClick={() => goToPage(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    ← Previous
+                  </s-button>
+                  <s-text>
+                    Page {page} of {totalPages}
+                  </s-text>
+                  <s-button
+                    variant="tertiary"
+                    onClick={() => goToPage(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    Next →
+                  </s-button>
+                </s-stack>
+              </s-stack>
+            </s-box>
+          )}
+        </s-section>
+      )}
 
       {/* Hidden trigger buttons — commandFor is the reliable Shopify way to open and close s-modal */}
       <div style={{ display: "none" }}>
