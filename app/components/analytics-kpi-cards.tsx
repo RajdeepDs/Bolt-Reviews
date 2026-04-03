@@ -1,3 +1,5 @@
+import { Tooltip } from "@shopify/polaris";
+
 export interface KpiData {
   reviewsReceived: number;
   published: number;
@@ -5,54 +7,61 @@ export interface KpiData {
   pending: number;
 }
 
-function InfoIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      style={{ flexShrink: 0, opacity: 0.45 }}
-    >
-      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.2" />
-      <text
-        x="8"
-        y="8.5"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize="9.5"
-        fontWeight="600"
-        fontStyle="italic"
-        fill="currentColor"
-        fontFamily="serif"
-      >
-        i
-      </text>
-    </svg>
-  );
-}
+const cardStyle: React.CSSProperties = {
+  background: "#ffffff",
+  borderRadius: "12px",
+  border: "1px solid #e3e3e3",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+  padding: "16px",
+};
 
-function KpiCard({ label, value }: { label: string; value: string | number }) {
+function KpiCard({
+  label,
+  value,
+  tooltip,
+}: {
+  label: string;
+  value: string | number;
+  tooltip: string;
+}) {
   return (
-    <s-box padding="base" border="base" borderRadius="large">
+    <div style={cardStyle}>
       <s-stack direction="block" gap="small">
         <s-stack direction="inline" justifyContent="space-between" alignItems="center">
-          <s-text fontWeight="semibold">{label}</s-text>
-          <InfoIcon />
+          <s-heading>{label}</s-heading>
+          <Tooltip content={tooltip}>
+            <s-icon type="info" tone="neutral" />
+          </Tooltip>
         </s-stack>
         <s-heading>{value}</s-heading>
       </s-stack>
-    </s-box>
+    </div>
   );
 }
 
 export default function AnalyticsKpiCards({ kpi }: { kpi: KpiData }) {
   return (
     <s-grid gap="base" gridTemplateColumns="1fr 1fr 1fr 1fr">
-      <KpiCard label="Reviews Received" value={kpi.reviewsReceived} />
-      <KpiCard label="Published Reviews" value={kpi.published} />
-      <KpiCard label="Publish Rate" value={`${kpi.publishRate}%`} />
-      <KpiCard label="Pending Reviews" value={kpi.pending} />
+      <KpiCard
+        label="Reviews Received"
+        value={kpi.reviewsReceived}
+        tooltip="Total number of reviews received during the selected period."
+      />
+      <KpiCard
+        label="Published Reviews"
+        value={kpi.published}
+        tooltip="Reviews that have been approved and are visible on your store."
+      />
+      <KpiCard
+        label="Publish Rate"
+        value={`${kpi.publishRate}%`}
+        tooltip="Percentage of received reviews that were published."
+      />
+      <KpiCard
+        label="Pending Reviews"
+        value={kpi.pending}
+        tooltip="Reviews awaiting moderation or approval."
+      />
     </s-grid>
   );
 }
