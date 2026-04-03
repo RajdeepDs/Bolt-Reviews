@@ -16,6 +16,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { updateProductStats } from "../utils/product-stats.server";
 
+import { Card, Text } from "@shopify/polaris";
+
 import ReviewsEmptyState from "../components/reviews-empty-state";
 import ReviewsTable from "../components/reviews-table";
 import ReviewImportModal from "../components/reviews-import-modal";
@@ -428,6 +430,55 @@ export default function ReviewsIndex() {
 
   return (
     <s-page heading="My Reviews" inlineSize="base">
+      <div style={{ marginBottom: "20px" }}>
+        <Card padding="400">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+              <div
+                style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "50%",
+                  backgroundColor: "#F4F0FD",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#8B5CF6",
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                </svg>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <Text as="span" variant="bodyMd" fontWeight="bold">
+                  How's your experience with Bolt Reviews?
+                </Text>
+                <Text as="span" variant="bodyMd" tone="subdued">
+                  Your feedback helps us improve the app.
+                </Text>
+              </div>
+              <div style={{ display: "flex", gap: "4px", cursor: "pointer", marginLeft: "8px" }}>
+                {[1, 2, 3].map((i) => (
+                  <svg key={i} width="16" height="16" viewBox="0 0 24 24" fill="#5C5F62" stroke="#5C5F62" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                ))}
+                {[4, 5].map((i) => (
+                  <svg key={i} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5C5F62" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                ))}
+              </div>
+            </div>
+            
+            <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5C5F62", display: "flex" }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="1.5"></circle>
+                <circle cx="19" cy="12" r="1.5"></circle>
+                <circle cx="5" cy="12" r="1.5"></circle>
+              </svg>
+            </button>
+          </div>
+        </Card>
+      </div>
+
       {selectedReviews.length === 0 && (
         <s-button slot="primary-action" commandFor="import-modal">Import reviews (CSV)</s-button>
       )}
