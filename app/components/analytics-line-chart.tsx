@@ -46,9 +46,9 @@ export default function AnalyticsLineChart({
   );
 
   return (
-    <s-box padding="base" border="base" borderRadius="large">
-      <s-stack direction="block" gap="small">
-        <s-text fontWeight="semibold">Daily Reviews</s-text>
+    <s-section>
+      <s-stack direction="block" gap="small-400">
+        <s-heading>Daily Reviews</s-heading>
         <s-text color="subdued">
           See how many reviews you're receiving each day.
         </s-text>
@@ -131,7 +131,7 @@ export default function AnalyticsLineChart({
             <svg width="20" height="2">
               <line x1="0" y1="1" x2="20" y2="1" stroke="#2c6ecb" strokeWidth="2" />
             </svg>
-            <s-text color="subdued" fontSize="small">
+            <s-text color="subdued">
               {fmtRange(dateRange.start, dateRange.end)}
             </s-text>
           </s-stack>
@@ -139,12 +139,12 @@ export default function AnalyticsLineChart({
             <svg width="20" height="2">
               <line x1="0" y1="1" x2="20" y2="1" stroke="#8c9196" strokeWidth="1.5" strokeDasharray="3 3" />
             </svg>
-            <s-text color="subdued" fontSize="small">
+            <s-text color="subdued">
               {fmtRange(prevDateRange.start, prevDateRange.end)}
             </s-text>
           </s-stack>
         </s-stack>
       </s-box>
-    </s-box>
+    </s-section>
   );
 }

@@ -7,14 +7,6 @@ export interface KpiData {
   pending: number;
 }
 
-const cardStyle: React.CSSProperties = {
-  background: "#ffffff",
-  borderRadius: "12px",
-  border: "1px solid #e3e3e3",
-  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-  padding: "16px",
-};
-
 function KpiCard({
   label,
   value,
@@ -25,7 +17,7 @@ function KpiCard({
   tooltip: string;
 }) {
   return (
-    <div style={cardStyle}>
+    <s-section>
       <s-stack direction="block" gap="small">
         <s-stack direction="inline" justifyContent="space-between" alignItems="center">
           <s-heading>{label}</s-heading>
@@ -35,7 +27,7 @@ function KpiCard({
         </s-stack>
         <s-heading>{value}</s-heading>
       </s-stack>
-    </div>
+    </s-section>
   );
 }
 

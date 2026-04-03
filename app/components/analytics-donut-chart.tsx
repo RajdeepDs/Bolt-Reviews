@@ -19,17 +19,17 @@ export default function AnalyticsDonutChart({
     total === 0
       ? []
       : [
-          { value: published, color: "#29845a" },
-          { value: pending, color: "#b98900" },
-          { value: rejected, color: "#d72c0d" },
-        ].filter((s) => s.value > 0);
+        { value: published, color: "#29845a" },
+        { value: pending, color: "#b98900" },
+        { value: rejected, color: "#d72c0d" },
+      ].filter((s) => s.value > 0);
 
   let cumulative = 0;
 
   return (
-    <s-box padding="base" border="base" borderRadius="large">
-      <s-stack direction="block" gap="small">
-        <s-text fontWeight="semibold">Review Status</s-text>
+    <s-section>
+      <s-stack direction="block" gap="small-400">
+        <s-heading>Review Status</s-heading>
         <s-text color="subdued">
           See the breakdown of your review statuses.
         </s-text>
@@ -91,6 +91,6 @@ export default function AnalyticsDonutChart({
           </svg>
         </div>
       </s-box>
-    </s-box>
+    </s-section>
   );
 }
