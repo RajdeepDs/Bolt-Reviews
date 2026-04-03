@@ -4,167 +4,220 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 
+import AnalyticsFilterBar from "../components/analytics-filter-bar";
+import AnalyticsKpiCards from "../components/analytics-kpi-cards";
+import AnalyticsDonutChart from "../components/analytics-donut-chart";
+import AnalyticsLineChart from "../components/analytics-line-chart";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
   const shopId = session.shop;
 
   // Sync app URL to shop metafield in the background
-  // This ensures the theme app extension always has the correct URL to fetch from
-  admin.graphql(`query { shop { id } }`).then(async (shopResponse: any) => {
-    const shopData = await shopResponse.json();
-    const shopGid = shopData.data?.shop?.id;
-    
-    if (shopGid && process.env.SHOPIFY_APP_URL) {
-      await admin.graphql(`
-        mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
-          metafieldsSet(metafields: $metafields) {
-            userErrors { message }
-          }
-        }
-      `, {
-        variables: {
-          metafields: [{
-            ownerId: shopGid,
-            namespace: "bolt_reviews",
-            key: "app_url",
-            value: process.env.SHOPIFY_APP_URL,
-            type: "url"
-          }]
-        }
-      });
-    }
-  }).catch((e: any) => console.error("Error setting app_url metafield:", e));
+  admin
+    .graphql(`query { shop { id } }`)
+    .then(async (shopResponse: any) => {
+      const shopData = await shopResponse.json();
+      const shopGid = shopData.data?.shop?.id;
 
-  // Get current date boundaries for "this month" stats
+      if (shopGid && process.env.SHOPIFY_APP_URL) {
+        await admin.graphql(
+          `mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              userErrors { message }
+            }
+          }`,
+          {
+            variables: {
+              metafields: [
+                {
+                  ownerId: shopGid,
+                  namespace: "bolt_reviews",
+                  key: "app_url",
+                  value: process.env.SHOPIFY_APP_URL,
+                  type: "url",
+                },
+              ],
+            },
+          },
+        );
+      }
+    })
+    .catch((e: any) =>
+      console.error("Error setting app_url metafield:", e),
+    );
+
+  // ── Date ranges (from URL params or default last 30d) ──────
+  const url = new URL(request.url);
+  const fromParam = url.searchParams.get("from");
+  const toParam = url.searchParams.get("to");
+
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const periodEnd = toParam ? new Date(toParam + "T23:59:59") : now;
+  const periodStart = fromParam
+    ? new Date(fromParam + "T00:00:00")
+    : new Date(new Date(now).setDate(now.getDate() - 30));
 
-  // Run all queries in parallel
+  // Previous period = same duration right before the selected period
+  const durationMs = periodEnd.getTime() - periodStart.getTime();
+  const prevEnd = new Date(periodStart.getTime() - 1);
+  const prevStart = new Date(prevEnd.getTime() - durationMs);
+
+  // ── Parallel queries ────────────────────────────────────────
   const [
+    currentPeriodReviews,
+    previousPeriodReviews,
     statusCounts,
-    overallStats,
-    thisMonthCount,
-    lastMonthCount,
+    publishedCurrent,
+    pendingCurrent,
   ] = await Promise.all([
-    // Status counts
+    prisma.review.findMany({
+      where: { shopId, createdAt: { gte: periodStart } },
+      select: { createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.review.findMany({
+      where: {
+        shopId,
+        createdAt: { gte: prevStart, lt: periodStart },
+      },
+      select: { createdAt: true },
+      orderBy: { createdAt: "asc" },
+    }),
     prisma.review.groupBy({
       by: ["status"],
       where: { shopId },
       _count: { status: true },
     }),
-
-    // Overall average rating (all reviews)
-    prisma.review.aggregate({
-      where: { shopId },
-      _avg: { rating: true },
-      _count: { id: true },
-    }),
-
-    // Reviews this month
-    prisma.review.count({
-      where: { shopId, createdAt: { gte: startOfMonth } },
-    }),
-
-    // Reviews last month
     prisma.review.count({
       where: {
         shopId,
-        createdAt: { gte: startOfLastMonth, lt: startOfMonth },
+        status: "published",
+        createdAt: { gte: periodStart },
+      },
+    }),
+    prisma.review.count({
+      where: {
+        shopId,
+        status: "pending",
+        createdAt: { gte: periodStart },
       },
     }),
   ]);
 
-  // Build counts
-  const counts = { total: 0, published: 0, pending: 0, rejected: 0 };
+  // ── Status distribution ─────────────────────────────────────
+  const statuses = { published: 0, pending: 0, rejected: 0 };
   statusCounts.forEach(
     (item: { status: string; _count: { status: number } }) => {
-      if (item.status === "pending") counts.pending = item._count.status;
-      if (item.status === "published") counts.published = item._count.status;
-      if (item.status === "rejected") counts.rejected = item._count.status;
+      if (item.status in statuses)
+        statuses[item.status as keyof typeof statuses] = item._count.status;
     },
   );
-  counts.total = counts.published + counts.pending + counts.rejected;
 
-  // Calculate month-over-month trend
-  const monthTrend =
-    lastMonthCount > 0
-      ? Math.round(((thisMonthCount - lastMonthCount) / lastMonthCount) * 100)
-      : thisMonthCount > 0
-        ? 100
-        : 0;
+  // ── Daily buckets ───────────────────────────────────────────
+  const dailyMap = new Map<string, number>();
+  const prevDailyMap = new Map<string, number>();
+
+  for (
+    let d = new Date(periodStart);
+    d <= periodEnd;
+    d.setDate(d.getDate() + 1)
+  ) {
+    dailyMap.set(d.toISOString().split("T")[0], 0);
+  }
+  for (
+    let d = new Date(prevStart);
+    d < new Date(periodStart);
+    d.setDate(d.getDate() + 1)
+  ) {
+    prevDailyMap.set(d.toISOString().split("T")[0], 0);
+  }
+
+  currentPeriodReviews.forEach((r: { createdAt: Date }) => {
+    const key = new Date(r.createdAt).toISOString().split("T")[0];
+    dailyMap.set(key, (dailyMap.get(key) || 0) + 1);
+  });
+  previousPeriodReviews.forEach((r: { createdAt: Date }) => {
+    const key = new Date(r.createdAt).toISOString().split("T")[0];
+    prevDailyMap.set(key, (prevDailyMap.get(key) || 0) + 1);
+  });
+
+  const currentTotal = currentPeriodReviews.length;
+  const publishRate =
+    currentTotal > 0 ? Math.round((publishedCurrent / currentTotal) * 100) : 0;
 
   return {
     kpi: {
-      averageRating: Number(overallStats._avg.rating ?? 0),
-      totalReviews: counts.total,
-      publishedReviews: counts.published,
-      pendingReviews: counts.pending,
-      rejectedReviews: counts.rejected,
-      thisMonthReviews: thisMonthCount,
-      monthTrend,
+      reviewsReceived: currentTotal,
+      published: publishedCurrent,
+      publishRate,
+      pending: pendingCurrent,
+    },
+    statusDistribution: statuses,
+    totalReviews:
+      statuses.published + statuses.pending + statuses.rejected,
+    dailyReviews: Array.from(dailyMap.entries()).map(([date, count]) => ({
+      date,
+      count,
+    })),
+    dailyReviewsPrev: Array.from(prevDailyMap.entries()).map(
+      ([date, count]) => ({ date, count }),
+    ),
+    dateRange: {
+      start: periodStart.toISOString().split("T")[0],
+      end: periodEnd.toISOString().split("T")[0],
+    },
+    prevDateRange: {
+      start: prevStart.toISOString().split("T")[0],
+      end: prevEnd.toISOString().split("T")[0],
     },
   };
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   PAGE
+   ═══════════════════════════════════════════════════════════════ */
+
 export default function AnalyticsIndex() {
-  const { kpi } = useLoaderData<typeof loader>();
+  const {
+    kpi,
+    statusDistribution,
+    totalReviews,
+    dailyReviews,
+    dailyReviewsPrev,
+    dateRange,
+    prevDateRange,
+  } = useLoaderData<typeof loader>();
 
   return (
     <s-page heading="Analytics" inlineSize="base">
-      {/* KPI BAR */}
-      <s-section accessibilityLabel="KPI bar" padding="none">
-        <s-grid gap="none" gridTemplateColumns="1fr 1fr 1fr 1fr">
-          <s-box padding="base">
-            <s-stack direction="block" gap="small-100">
-              <s-text color="subdued">Average Rating</s-text>
-              <s-heading>
-                {kpi.averageRating > 0
-                  ? `${kpi.averageRating.toFixed(1)} ⭐`
-                  : "—"}
-              </s-heading>
-            </s-stack>
-          </s-box>
-          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
-            <s-box padding="base">
-              <s-stack direction="block" gap="small-100">
-                <s-text color="subdued">Total Reviews</s-text>
-                <s-heading>{kpi.totalReviews}</s-heading>
-              </s-stack>
-            </s-box>
-          </div>
-          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
-            <s-box padding="base">
-              <s-stack direction="block" gap="small-100">
-                <s-text color="subdued">Pending Reviews</s-text>
-                <s-heading>{kpi.pendingReviews}</s-heading>
-              </s-stack>
-            </s-box>
-          </div>
-          <div style={{ borderInlineStart: "1px solid var(--s-color-border, #e1e3e5)" }}>
-            <s-box padding="base">
-              <s-stack direction="block" gap="small-100">
-                <s-text color="subdued">This Month</s-text>
-                <s-heading>
-                  {kpi.thisMonthReviews}
-                  {kpi.monthTrend !== 0 && (
-                    <s-text color="subdued">
-                      {" "}
-                      ({kpi.monthTrend > 0 ? "+" : ""}
-                      {kpi.monthTrend}%)
-                    </s-text>
-                  )}
-                </s-heading>
-              </s-stack>
-            </s-box>
-          </div>
+      <s-stack direction="block" gap="base">
+        {/* Filter bar */}
+        <AnalyticsFilterBar />
+
+        {/* KPI cards */}
+        <AnalyticsKpiCards kpi={kpi} />
+
+        {/* Charts row */}
+        <s-grid gap="base" gridTemplateColumns="1fr 2fr">
+          <AnalyticsDonutChart
+            published={statusDistribution.published}
+            pending={statusDistribution.pending}
+            rejected={statusDistribution.rejected}
+            total={totalReviews}
+          />
+
+          <AnalyticsLineChart
+            data={dailyReviews}
+            prevData={dailyReviewsPrev}
+            dateRange={dateRange}
+            prevDateRange={prevDateRange}
+          />
         </s-grid>
-      </s-section>
+      </s-stack>
     </s-page>
   );
 }
-
-
 
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
