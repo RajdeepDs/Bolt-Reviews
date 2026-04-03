@@ -1,12 +1,33 @@
+import { useState, useCallback } from "react";
+import { useFetcher } from "react-router";
 import type { Review, StatusCounts } from "../utils/reviews-types";
+import {
+  IndexFilters,
+  useSetIndexFiltersMode,
+  ChoiceList,
+  RangeSlider,
+  TextField,
+  LegacyCard,
+  Card
+} from "@shopify/polaris";
+import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
 
-function formatDate(dateString: string) {
+function formatDate(dateString: string | Date) {
   const date = new Date(dateString);
   const months = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
   return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+// Helper to check for empty values in mock filters
+function isEmpty(value: string | any[]) {
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  } else {
+    return value === '' || value == null;
+  }
 }
 
 interface ReviewsTableProps {
@@ -44,12 +65,179 @@ export default function ReviewsTable({
   onOpenReviewDetail,
   onGoToPage,
 }: ReviewsTableProps) {
-  const startItem = (page - 1) * 25 + 1;
-  const endItem = Math.min(page * 25, totalFiltered);
+  const { mode, setMode } = useSetIndexFiltersMode();
+
+  // Tab setup matching application routing state
+  const tabs: TabProps[] = [
+    { id: "all", content: `All (${counts.all})` },
+    { id: "pending", content: `Pending (${counts.pending})` },
+    { id: "published", content: `Published (${counts.published})` },
+    { id: "rejected", content: `Rejected (${counts.rejected})` },
+  ];
+  const selected = Math.max(0, tabs.findIndex((tab) => tab.id === currentFilter));
+
+  const handleTabSelect = (selectedTabIndex: number) => {
+    onFilterChange(tabs[selectedTabIndex].id);
+  };
+
+  // Mock Sorting (from snippet)
+  const sortOptions: IndexFiltersProps['sortOptions'] = [
+    { label: 'Date', value: 'date asc', directionLabel: 'Oldest' },
+    { label: 'Date', value: 'date desc', directionLabel: 'Newest' },
+    { label: 'Rating', value: 'rating asc', directionLabel: 'Lowest' },
+    { label: 'Rating', value: 'rating desc', directionLabel: 'Highest' },
+  ];
+  const [sortSelected, setSortSelected] = useState(['date desc']);
+
+  // Mock Filters (from snippet, adapted gracefully)
+  const [accountStatus, setAccountStatus] = useState<string[] | undefined>(undefined);
+  const [moneySpent, setMoneySpent] = useState<[number, number] | undefined>(undefined);
+  const [taggedWith, setTaggedWith] = useState('');
+
+  const handleAccountStatusChange = useCallback((value: string[]) => setAccountStatus(value), []);
+  const handleMoneySpentChange = useCallback((value: [number, number]) => setMoneySpent(value), []);
+  const handleTaggedWithChange = useCallback((value: string) => setTaggedWith(value), []);
+
+  const handleAccountStatusRemove = useCallback(() => setAccountStatus(undefined), []);
+  const handleMoneySpentRemove = useCallback(() => setMoneySpent(undefined), []);
+  const handleTaggedWithRemove = useCallback(() => setTaggedWith(''), []);
+
+  const handleFiltersClearAll = useCallback(() => {
+    handleAccountStatusRemove();
+    handleMoneySpentRemove();
+    handleTaggedWithRemove();
+  }, [handleAccountStatusRemove, handleMoneySpentRemove, handleTaggedWithRemove]);
+
+  const filters = [
+    {
+      key: 'accountStatus',
+      label: 'Account status',
+      filter: (
+        <ChoiceList
+          title="Account status"
+          titleHidden
+          choices={[
+            { label: 'Enabled', value: 'enabled' },
+            { label: 'Not invited', value: 'not invited' },
+            { label: 'Invited', value: 'invited' },
+            { label: 'Declined', value: 'declined' },
+          ]}
+          selected={accountStatus || []}
+          onChange={handleAccountStatusChange}
+          allowMultiple
+        />
+      ),
+      shortcut: true,
+    },
+    {
+      key: 'taggedWith',
+      label: 'Tagged with',
+      filter: (
+        <TextField
+          label="Tagged with"
+          value={taggedWith}
+          onChange={handleTaggedWithChange}
+          autoComplete="off"
+          labelHidden
+        />
+      ),
+      shortcut: true,
+    },
+    {
+      key: 'moneySpent',
+      label: 'Money spent',
+      filter: (
+        <RangeSlider
+          label="Money spent is between"
+          labelHidden
+          value={moneySpent || [0, 500]}
+          prefix="$"
+          output
+          min={0}
+          max={2000}
+          step={1}
+          onChange={handleMoneySpentChange}
+        />
+      ),
+    },
+  ];
+
+  const appliedFilters: IndexFiltersProps['appliedFilters'] = [];
+  if (accountStatus && !isEmpty(accountStatus)) {
+    appliedFilters.push({
+      key: 'accountStatus',
+      label: `Account status: ${accountStatus.join(', ')}`,
+      onRemove: handleAccountStatusRemove,
+    });
+  }
+  if (moneySpent) {
+    appliedFilters.push({
+      key: 'moneySpent',
+      label: `Money spent is between $${moneySpent[0]} and $${moneySpent[1]}`,
+      onRemove: handleMoneySpentRemove,
+    });
+  }
+  if (!isEmpty(taggedWith)) {
+    appliedFilters.push({
+      key: 'taggedWith',
+      label: `Tagged with ${taggedWith}`,
+      onRemove: handleTaggedWithRemove,
+    });
+  }
+
+  // Primary action mock
+  const onHandleCancel = () => { };
+  const onHandleSave = async () => {
+    return true;
+  };
+
+  const primaryAction: IndexFiltersProps['primaryAction'] = {
+    type: 'save',
+    onAction: onHandleSave,
+    disabled: false,
+    loading: false,
+  };
 
   return (
     <s-section>
+      <s-stack gap="small">
+        <s-stack
+          direction="inline"
+          justifyContent="space-between"
+          alignItems="center"
+        >
+          <s-heading>Reviews</s-heading>
+          <s-button variant="primary">Import reviews</s-button>
+        </s-stack>
 
+        <Card padding="0">
+          <IndexFilters
+            sortOptions={sortOptions}
+            sortSelected={sortSelected}
+            queryValue={searchQuery}
+            queryPlaceholder="Searching in all"
+            onQueryChange={onSearchChange}
+            onQueryClear={() => onSearchChange('')}
+            onSort={setSortSelected}
+            primaryAction={primaryAction}
+            cancelAction={{
+              onAction: onHandleCancel,
+              disabled: false,
+              loading: false,
+            }}
+            tabs={tabs}
+            selected={selected}
+            onSelect={handleTabSelect}
+            canCreateNewView={false}
+            filters={filters}
+            appliedFilters={appliedFilters}
+            onClearAll={handleFiltersClearAll}
+            mode={mode}
+            setMode={setMode}
+          />
+          {/* Index table go here */}
+        </Card>
+      </s-stack>
     </s-section>
   );
 }
