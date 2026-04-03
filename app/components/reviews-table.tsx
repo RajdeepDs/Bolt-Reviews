@@ -217,12 +217,7 @@ export default function ReviewsTable({
   };
 
   const rowMarkup = reviews.map((review, index) => {
-    const dotColor =
-      review.status === "published"
-        ? "#3091B2" // Blue-ish
-        : review.status === "rejected"
-        ? "#D82C0D" // Red-ish
-        : "#8C9196"; // Grey for pending
+    const dotColor = review.status === "published" ? "#008060" : "#8C9196";
 
     return (
       <IndexTable.Row
@@ -244,14 +239,14 @@ export default function ReviewsTable({
               }}
             />
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <Text as="span" variant="bodyMd" fontWeight="bold">
+              <s-heading>
                 {review.title || "No Title"}
-              </Text>
-              <Text as="span" variant="bodySm" tone="subdued">
+              </s-heading>
+              <s-text>
                 {review.content.length > 50
                   ? review.content.substring(0, 50) + "..."
                   : review.content}
-              </Text>
+              </s-text>
             </div>
           </div>
         </IndexTable.Cell>
@@ -265,19 +260,6 @@ export default function ReviewsTable({
           <Text as="span" variant="bodyMd">
             {review.rating} / 5
           </Text>
-        </IndexTable.Cell>
-        <IndexTable.Cell>
-          <Badge
-            tone={
-              review.status === "published"
-                ? "success"
-                : review.status === "rejected"
-                ? "critical"
-                : "info"
-            }
-          >
-            {review.status}
-          </Badge>
         </IndexTable.Cell>
       </IndexTable.Row>
     );
@@ -334,7 +316,6 @@ export default function ReviewsTable({
               { title: "Created" },
               { title: "Product" },
               { title: "Rating" },
-              { title: "Status" },
             ]}
           >
             {rowMarkup}
