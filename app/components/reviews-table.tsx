@@ -8,7 +8,10 @@ import {
   RangeSlider,
   TextField,
   LegacyCard,
-  Card
+  Card,
+  IndexTable,
+  Text,
+  Badge
 } from "@shopify/polaris";
 import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
 
@@ -198,6 +201,88 @@ export default function ReviewsTable({
     loading: false,
   };
 
+  const handleSelectionChange = (
+    selectionType: any,
+    isSelecting: boolean,
+    selection?: any
+  ) => {
+    if (selectionType === "all" || selectionType === "page") {
+      onToggleSelectAll(null);
+    } else if (selectionType === "single" && typeof selection === "string") {
+      onToggleReview(selection);
+    } else if (selectionType === "multi" && Array.isArray(selection)) {
+      // Basic fallback for shift+click multi-array if triggered
+      selection.forEach((id) => onToggleReview(id as string));
+    }
+  };
+
+  const rowMarkup = reviews.map((review, index) => {
+    const dotColor =
+      review.status === "published"
+        ? "#3091B2" // Blue-ish
+        : review.status === "rejected"
+        ? "#D82C0D" // Red-ish
+        : "#8C9196"; // Grey for pending
+
+    return (
+      <IndexTable.Row
+        id={review.id}
+        key={review.id}
+        selected={selectedReviews.includes(review.id)}
+        position={index}
+        onClick={() => onOpenReviewDetail(review)}
+      >
+        <IndexTable.Cell>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: "250px" }}>
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor: dotColor,
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <Text as="span" variant="bodyMd" fontWeight="bold">
+                {review.title || "No Title"}
+              </Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {review.content.length > 50
+                  ? review.content.substring(0, 50) + "..."
+                  : review.content}
+              </Text>
+            </div>
+          </div>
+        </IndexTable.Cell>
+        <IndexTable.Cell>{formatDate(review.createdAt)}</IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd" tone="subdued">
+            {review.product.title}
+          </Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd">
+            {review.rating} / 5
+          </Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Badge
+            tone={
+              review.status === "published"
+                ? "success"
+                : review.status === "rejected"
+                ? "critical"
+                : "info"
+            }
+          >
+            {review.status}
+          </Badge>
+        </IndexTable.Cell>
+      </IndexTable.Row>
+    );
+  });
+
   return (
     <s-section>
       <s-stack gap="small">
@@ -235,7 +320,25 @@ export default function ReviewsTable({
             mode={mode}
             setMode={setMode}
           />
-          {/* Index table go here */}
+          <IndexTable
+            resourceName={{ singular: "review", plural: "reviews" }}
+            itemCount={reviews.length}
+            selectedItemsCount={
+              selectedReviews.length === reviews.length && reviews.length > 0
+                ? "All"
+                : selectedReviews.length
+            }
+            onSelectionChange={handleSelectionChange}
+            headings={[
+              { title: "Review" },
+              { title: "Created" },
+              { title: "Product" },
+              { title: "Rating" },
+              { title: "Status" },
+            ]}
+          >
+            {rowMarkup}
+          </IndexTable>
         </Card>
       </s-stack>
     </s-section>
