@@ -69,13 +69,14 @@ export default function ReviewsTable({
   onGoToPage,
 }: ReviewsTableProps) {
   const { mode, setMode } = useSetIndexFiltersMode();
+  const fetcher = useFetcher();
 
   // Tab setup matching application routing state
   const tabs: TabProps[] = [
-    { id: "all", content: `All (${counts.all})` },
-    { id: "pending", content: `Pending (${counts.pending})` },
-    { id: "published", content: `Published (${counts.published})` },
-    { id: "rejected", content: `Rejected (${counts.rejected})` },
+    { id: "all", content: `All` },
+    { id: "pending", content: `Pending` },
+    { id: "published", content: `Published` },
+    { id: "rejected", content: `Rejected` },
   ];
   const selected = Math.max(0, tabs.findIndex((tab) => tab.id === currentFilter));
 
@@ -257,9 +258,23 @@ export default function ReviewsTable({
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" variant="bodyMd">
-            {review.rating} / 5
+          <Text as="span" variant="bodyMd" alignment="center">
+            {review.rating}
           </Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <div onClick={(e) => {
+            e.stopPropagation();
+            const actionType = review.status === "published" ? "unpublish" : "publish";
+            fetcher.submit(
+              { actionType, reviewIds: JSON.stringify([review.id]) },
+              { method: "post" }
+            );
+          }}>
+            <s-switch
+              checked={review.status === "published" ? true : undefined}
+            />
+          </div>
         </IndexTable.Cell>
       </IndexTable.Row>
     );
@@ -316,6 +331,7 @@ export default function ReviewsTable({
               { title: "Created" },
               { title: "Product" },
               { title: "Rating" },
+              { title: "Actions" },
             ]}
           >
             {rowMarkup}
