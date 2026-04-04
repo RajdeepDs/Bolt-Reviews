@@ -354,15 +354,21 @@ export default function ReviewsTable({
             mode={mode}
             setMode={setMode}
           />
-          <IndexTable
-            resourceName={{ singular: "review", plural: "reviews" }}
-            itemCount={reviews.length}
-            selectedItemsCount={
-              selectedReviews.length === reviews.length && reviews.length > 0
-                ? "All"
-                : selectedReviews.length
-            }
-            onSelectionChange={handleSelectionChange}
+            <IndexTable
+              resourceName={{ singular: "review", plural: "reviews" }}
+              itemCount={reviews.length}
+              selectedItemsCount={
+                selectedReviews.length === reviews.length && reviews.length > 0
+                  ? "All"
+                  : selectedReviews.length
+              }
+              onSelectionChange={handleSelectionChange}
+              pagination={{
+                hasNext: page < totalPages,
+                hasPrevious: page > 1,
+                onNext: () => onGoToPage(page + 1),
+                onPrevious: () => onGoToPage(page - 1)
+              }}
             headings={[
               { title: "Review" },
               { title: "Created" },
