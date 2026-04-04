@@ -101,10 +101,6 @@ export default function ProductsIndex() {
     }
   }, [isSyncing, fetcher.state, fetcher.data]);
 
-  const handleSetup = async () => {
-    setIsSyncing(true);
-    fetcher.submit({}, { method: "post", action: "/api/setup" });
-  };
 
   // Pagination & Search
   const goToPage = (newPage: number) => {
@@ -135,14 +131,7 @@ export default function ProductsIndex() {
       <s-button slot="primary-action" onClick={handleSync} disabled={isSyncing}>
         {isSyncing ? "Syncing..." : "Sync Products"}
       </s-button>
-      <s-button slot="secondary-actions" commandFor="products-menu">
-        More actions
-      </s-button>
-      <s-menu id="products-menu">
-        <s-button onClick={handleSetup} disabled={isSyncing}>
-          Run Setup (Sync + Settings)
-        </s-button>
-      </s-menu>
+
 
       <ProductsTable
         products={products}
