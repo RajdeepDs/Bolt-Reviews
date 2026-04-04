@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import {
   useLoaderData,
   useFetcher,
   useSearchParams,
+  useNavigation,
 } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import ProductsTable from "../components/products-table";
 
 const PRODUCTS_PER_PAGE = 25;
 
@@ -16,17 +18,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const url = new URL(request.url);
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
+  const search = url.searchParams.get("search") || "";
+
+  const where: any = {
+    shopId: session.shop,
+  };
+
+  if (search) {
+    where.title = { contains: search, mode: "insensitive" };
+  }
 
   // Get total count
-  const totalCount = await prisma.product.count({
-    where: { shopId: session.shop },
-  });
+  const totalCount = await prisma.product.count({ where });
 
   // Get products with pagination
   const products = await prisma.product.findMany({
-    where: {
-      shopId: session.shop,
-    },
+    where,
     orderBy: {
       createdAt: "desc",
     },
@@ -36,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Get pending review counts for each product
   const productsWithPending = await Promise.all(
-    products.map(async (product) => {
+    products.map(async (product: any) => {
       const pendingCount = await prisma.review.count({
         where: {
           productId: product.id,
@@ -63,8 +70,15 @@ export default function ProductsIndex() {
   const { products, totalCount, page, totalPages } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher();
+  const navigation = useNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSyncing, setIsSyncing] = useState(false);
+
+  const isLoading = navigation.state === "loading";
+
+  const [searchQuery, setSearchQuery] = useState(
+    searchParams.get("search") || "",
+  );
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -92,15 +106,29 @@ export default function ProductsIndex() {
     fetcher.submit({}, { method: "post", action: "/api/setup" });
   };
 
-  // Pagination
+  // Pagination & Search
   const goToPage = (newPage: number) => {
     const params = new URLSearchParams(searchParams);
     params.set("page", String(newPage));
     setSearchParams(params);
   };
 
-  const startItem = (page - 1) * PRODUCTS_PER_PAGE + 1;
-  const endItem = Math.min(page * PRODUCTS_PER_PAGE, totalCount);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams);
+      if (value) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      params.delete("page");
+      setSearchParams(params);
+    }, 400);
+  };
 
   return (
     <s-page heading="Products" inlineSize="base">
@@ -115,127 +143,17 @@ export default function ProductsIndex() {
           Run Setup (Sync + Settings)
         </s-button>
       </s-menu>
-      <s-section padding="none">
-        <s-table>
-          {/* Header Row */}
-          <s-table-header-row>
-            <s-table-header listSlot="primary">Product</s-table-header>
-            <s-table-header>Average Rating</s-table-header>
-            <s-table-header>Total Reviews</s-table-header>
-            <s-table-header>Pending</s-table-header>
-            <s-table-header listSlot="secondary">Reviews</s-table-header>
-          </s-table-header-row>
 
-          {/* Body */}
-          <s-table-body>
-            {products.length === 0 ? (
-              <s-table-row>
-                <s-table-cell>
-                  <s-box padding="large">
-                    <s-stack gap="large">
-                      <s-text>
-                        No products found. Click Sync Products to import your
-                        products from Shopify.
-                      </s-text>
-                      <s-button onClick={handleSync} disabled={isSyncing}>
-                        {isSyncing ? "Syncing..." : "Sync Products Now"}
-                      </s-button>
-                    </s-stack>
-                  </s-box>
-                </s-table-cell>
-              </s-table-row>
-            ) : (
-              products.map((product) => (
-                <s-table-row key={product.id}>
-                  {/* Product Name + Thumbnail */}
-                  <s-table-cell>
-                    <s-stack direction="inline" gap="small" alignItems="center">
-                      {product.imageUrl ? (
-                        <s-thumbnail
-                          src={product.imageUrl}
-                          alt={product.title}
-                          size="small"
-                        />
-                      ) : (
-                        <s-thumbnail alt={product.title} size="small" />
-                      )}
-                      <s-text>{product.title}</s-text>
-                    </s-stack>
-                  </s-table-cell>
-
-                  {/* Average Rating */}
-                  <s-table-cell>
-                    {product.reviewCount > 0 ? (
-                      <s-stack direction="inline" gap="small">
-                        <s-text>{product.averageRating.toFixed(1)}</s-text>
-                        <s-text>⭐</s-text>
-                      </s-stack>
-                    ) : (
-                      <s-text>—</s-text>
-                    )}
-                  </s-table-cell>
-
-                  {/* Total Reviews */}
-                  <s-table-cell>
-                    <s-text>{product.reviewCount}</s-text>
-                  </s-table-cell>
-
-                  {/* Pending Reviews */}
-                  <s-table-cell>
-                    {product.pendingReviews > 0 ? (
-                      <s-badge tone="warning">{product.pendingReviews}</s-badge>
-                    ) : (
-                      <s-text>0</s-text>
-                    )}
-                  </s-table-cell>
-
-                  {/* View Reviews Link */}
-                  <s-table-cell>
-                    <s-link href={`/reviews?productId=${product.id}`}>
-                      View reviews
-                    </s-link>
-                  </s-table-cell>
-                </s-table-row>
-              ))
-            )}
-          </s-table-body>
-        </s-table>
-
-        {/* PAGINATION */}
-        {totalPages > 1 && (
-          <s-box padding="base">
-            <s-stack
-              direction="inline"
-              gap="base"
-              alignItems="center"
-              justifyContent="space-between"
-            >
-              <s-text color="subdued">
-                Showing {startItem}–{endItem} of {totalCount} products
-              </s-text>
-              <s-stack direction="inline" gap="small">
-                <s-button
-                  variant="tertiary"
-                  onClick={() => goToPage(page - 1)}
-                  disabled={page <= 1}
-                >
-                  ← Previous
-                </s-button>
-                <s-text>
-                  Page {page} of {totalPages}
-                </s-text>
-                <s-button
-                  variant="tertiary"
-                  onClick={() => goToPage(page + 1)}
-                  disabled={page >= totalPages}
-                >
-                  Next →
-                </s-button>
-              </s-stack>
-            </s-stack>
-          </s-box>
-        )}
-      </s-section>
+      <ProductsTable
+        products={products}
+        totalCount={totalCount}
+        page={page}
+        totalPages={totalPages}
+        searchQuery={searchQuery}
+        isLoading={isLoading}
+        onSearchChange={handleSearchChange}
+        onGoToPage={goToPage}
+      />
     </s-page>
   );
 }
