@@ -11,8 +11,10 @@ import {
   Card,
   IndexTable,
   Text,
-  Badge
+  Badge,
+  Thumbnail
 } from "@shopify/polaris";
+import { ImageIcon } from "@shopify/polaris-icons";
 import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
 
 function formatDate(dateString: string | Date) {
@@ -239,6 +241,23 @@ export default function ReviewsTable({
                 flexShrink: 0,
               }}
             />
+            {(() => {
+              const src = review.imageUrl || (review.images && review.images.length > 0 ? review.images[0] : null) || review.product?.imageUrl;
+              if (src) {
+                return (
+                  <div style={{ width: 40, height: 40, borderRadius: 'var(--p-border-radius-200)', overflow: 'hidden', border: '1px solid var(--p-color-border-subdued)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--p-color-bg-surface-secondary)' }}>
+                    <img 
+                      src={src} 
+                      alt={review.title || review.product?.title || "Review Image"}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
+                  </div>
+                );
+              }
+              return (
+                <Thumbnail source={ImageIcon} alt="Placeholder" size="small" />
+              );
+            })()}
             <div style={{ display: "flex", flexDirection: "column" }}>
               <s-heading>
                 {review.title || "No Title"}
