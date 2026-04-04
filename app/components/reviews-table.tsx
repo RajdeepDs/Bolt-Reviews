@@ -328,7 +328,7 @@ export default function ReviewsTable({
           alignItems="center"
         >
           <s-heading>Reviews</s-heading>
-          <s-button variant="primary">Import reviews</s-button>
+          <s-button variant="primary" commandFor="import-modal">Import reviews</s-button>
         </s-stack>
 
         <Card padding="0">
