@@ -239,6 +239,7 @@ export default function ReviewsTable({
 
   const rowMarkup = reviews.map((review, index) => {
     const dotColor = review.status === "published" ? "#008060" : "#8C9196";
+    const ringColor = review.status === "published" ? "rgba(0, 128, 96, 0.2)" : "rgba(140, 145, 150, 0.25)";
 
     return (
       <IndexTable.Row
@@ -256,6 +257,7 @@ export default function ReviewsTable({
                 height: "8px",
                 borderRadius: "50%",
                 backgroundColor: dotColor,
+                boxShadow: `0 0 0 3px ${ringColor}`,
                 flexShrink: 0,
               }}
             />

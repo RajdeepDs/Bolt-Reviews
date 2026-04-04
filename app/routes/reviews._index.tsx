@@ -408,8 +408,8 @@ export default function ReviewsIndex() {
     }
 
     try {
-      const productId = searchParams.get("productId");
-      const url = productId ? `/api/reviews/export?productId=${productId}` : "/api/reviews/export";
+      const qs = searchParams.toString();
+      const url = qs ? `/api/reviews/export?${qs}` : "/api/reviews/export";
 
       const response = await fetch(url);
       if (!response.ok) throw new Error("Export failed");
@@ -419,6 +419,7 @@ export default function ReviewsIndex() {
       const a = document.createElement("a");
       a.href = downloadUrl;
       const tstamp = new Date().toISOString().split("T")[0];
+      const productId = searchParams.get("productId");
       a.download = productId ? `reviews-product-${tstamp}.csv` : `reviews-all-${tstamp}.csv`;
       document.body.appendChild(a);
       a.click();
@@ -495,7 +496,7 @@ export default function ReviewsIndex() {
                 ))}
               </div>
             </div>
-            
+
             <button style={{ background: "none", border: "none", cursor: "pointer", color: "#5C5F62", display: "flex" }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="1.5"></circle>
@@ -508,24 +509,16 @@ export default function ReviewsIndex() {
       </div>
 
       {selectedReviews.length === 0 && (
-        <s-button slot="primary-action" commandFor="import-modal">Import reviews (CSV)</s-button>
+        <s-button slot="primary-action" commandFor="import-modal">Import reviews</s-button>
       )}
 
       <ReviewImportModal />
 
       {selectedReviews.length === 0 && (
-        <s-button slot="secondary-actions" commandFor="more-actions-id">
-          More actions
+        <s-button slot="secondary-actions" onClick={handleExport}>
+          Export reviews
         </s-button>
       )}
-      <s-menu id="more-actions-id">
-        <s-button onClick={handleExport}>Export reviews (CSV)</s-button>
-        <s-button
-          onClick={() => window.open("/api/reviews/template", "_blank")}
-        >
-          Download CSV Template
-        </s-button>
-      </s-menu>
 
       {/* Bulk actions */}
       {selectedReviews.length > 0 && (
@@ -536,7 +529,7 @@ export default function ReviewsIndex() {
               onClick={() => handleBulkAction("publish")}
               disabled={isSubmitting}
             >
-              Publish ({publishableCount})
+              Publish
             </s-button>
           )}
 

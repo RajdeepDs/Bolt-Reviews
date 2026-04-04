@@ -8,17 +8,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const url = new URL(request.url);
     const productId = url.searchParams.get("productId");
+    const status = url.searchParams.get("status") || "all";
+    const search = url.searchParams.get("search") || "";
+    const ratingFilter = url.searchParams.getAll("rating");
 
     // Build where clause
-    const where: {
-      shopId: string;
-      productId?: string;
-    } = {
+    const where: any = {
       shopId: session.shop,
     };
 
     if (productId) {
       where.productId = productId;
+    }
+
+    if (status === "pending") {
+      where.status = "pending";
+    } else if (status === "published") {
+      where.status = "published";
+    } else if (status === "low") {
+      where.rating = { lte: 3 };
+    }
+
+    if (ratingFilter && ratingFilter.length > 0) {
+      where.rating = { in: ratingFilter.map((r: string) => parseInt(r)) };
+    }
+
+    if (search) {
+      where.OR = [
+        { customerName: { contains: search, mode: "insensitive" } },
+        { title: { contains: search, mode: "insensitive" } },
+        { content: { contains: search, mode: "insensitive" } },
+      ];
     }
 
     // Fetch all reviews
