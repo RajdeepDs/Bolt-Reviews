@@ -81,7 +81,7 @@ export default function ReviewsTable({
 }: ReviewsTableProps) {
   const { mode, setMode } = useSetIndexFiltersMode();
   const fetcher = useFetcher();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const filterProduct = searchParams.get('productId') || '';
 
   // Tab setup matching application routing state
@@ -96,14 +96,46 @@ export default function ReviewsTable({
     onFilterChange(tabs[selectedTabIndex].id);
   };
 
-  // Mock Sorting (from snippet)
+  const currentSortNative = searchParams.get('sort') || 'newest';
+
+  // Map backend sorting terms to polaris specific strict template strings
+  const mapToPolarisSort = (sort: string) => {
+    switch(sort) {
+      case 'oldest': return 'date asc';
+      case 'rating-low': return 'rating asc';
+      case 'rating-high': return 'rating desc';
+      case 'newest':
+      default: return 'date desc';
+    }
+  }
+  
+  const mapFromPolarisSort = (polarisSort: string) => {
+    switch(polarisSort) {
+      case 'date asc': return 'oldest';
+      case 'rating asc': return 'rating-low';
+      case 'rating desc': return 'rating-high';
+      case 'date desc':
+      default: return 'newest';
+    }
+  }
+
   const sortOptions: IndexFiltersProps['sortOptions'] = [
     { label: 'Date', value: 'date asc', directionLabel: 'Oldest' },
     { label: 'Date', value: 'date desc', directionLabel: 'Newest' },
     { label: 'Rating', value: 'rating asc', directionLabel: 'Lowest' },
     { label: 'Rating', value: 'rating desc', directionLabel: 'Highest' },
   ];
-  const [sortSelected, setSortSelected] = useState(['date desc']);
+
+  const handleSortChange = (value: string[]) => {
+    const params = new URLSearchParams(searchParams);
+    if (value && value.length > 0) {
+      params.set('sort', mapFromPolarisSort(value[0]));
+    } else {
+      params.delete('sort');
+    }
+    params.delete('page');
+    setSearchParams(params);
+  };
 
   // View Filters
   const handleFilterProductRemove = useCallback(() => {
@@ -300,12 +332,12 @@ export default function ReviewsTable({
         <Card padding="0">
           <IndexFilters
             sortOptions={sortOptions}
-            sortSelected={sortSelected}
+            sortSelected={[mapToPolarisSort(currentSortNative)]}
             queryValue={searchQuery}
             queryPlaceholder="Searching in all"
             onQueryChange={onSearchChange}
             onQueryClear={() => onSearchChange('')}
-            onSort={setSortSelected}
+            onSort={handleSortChange}
             primaryAction={primaryAction}
             cancelAction={{
               onAction: onHandleCancel,
