@@ -52,6 +52,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1"));
   const sort = url.searchParams.get("sort") || "newest";
   const productId = url.searchParams.get("productId") || "";
+  const ratingFilter = url.searchParams.getAll("rating");
 
   const where: any = {
     shopId: session.shop,
@@ -63,6 +64,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where.status = "published";
   } else if (status === "low") {
     where.rating = { lte: 3 };
+  }
+
+  if (ratingFilter && ratingFilter.length > 0) {
+    where.rating = { in: ratingFilter.map(r => parseInt(r)) };
   }
 
   if (productId) {
@@ -139,6 +144,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw e;
   }
 
+  const allProducts = await prisma.product.findMany({
+    where: { shopId: session.shop },
+    select: { id: true, title: true }
+  });
+
   const counts = {
     all: 0,
     pending: 0,
@@ -162,6 +172,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     page,
     totalPages: Math.ceil(totalFiltered / REVIEWS_PER_PAGE),
     filterProductName,
+    allProducts,
+    ratingFilter
   };
 };
 
@@ -270,7 +282,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ReviewsIndex() {
-  const { reviews, counts, totalFiltered, page, totalPages, filterProductName } =
+  const { reviews, counts, totalFiltered, page, totalPages, filterProductName, allProducts, ratingFilter } =
     useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -321,6 +333,22 @@ export default function ReviewsIndex() {
     setSearchParams(params);
     setSelectedReviews([]);
   };
+
+  const handleFilterProductChange = useCallback((value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value) params.set("productId", value);
+    else params.delete("productId");
+    params.delete("page");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
+
+  const handleFilterRatingChange = useCallback((value: string[]) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("rating");
+    value.forEach(v => params.append("rating", v));
+    params.delete("page");
+    setSearchParams(params);
+  }, [searchParams, setSearchParams]);
 
   // ── Selection handlers ───────────────────────────────────
   const toggleSelectAll = (e: any) => {
@@ -533,20 +561,6 @@ export default function ReviewsIndex() {
         </>
       )}
 
-      {/* Product filter chip */}
-      {filterProductName && (
-        <s-section padding="none">
-          <s-box padding="base">
-            <s-stack direction="inline" gap="small" alignItems="center">
-              <s-text>Filtered by product:</s-text>
-              <s-badge tone="info">{filterProductName}</s-badge>
-              <s-button variant="tertiary" onClick={clearProductFilter}>
-                ✕ Clear filter
-              </s-button>
-            </s-stack>
-          </s-box>
-        </s-section>
-      )}
 
       {/* Main content: empty state or table */}
       {counts.all === 0 ? (
@@ -568,6 +582,10 @@ export default function ReviewsIndex() {
           onToggleReview={toggleReview}
           onOpenReviewDetail={openReviewDetail}
           onGoToPage={goToPage}
+          allProducts={allProducts}
+          ratingFilter={ratingFilter}
+          onFilterProductChange={handleFilterProductChange}
+          onFilterRatingChange={handleFilterRatingChange}
         />
       )}
 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useSearchParams } from "react-router";
 import type { Review, StatusCounts } from "../utils/reviews-types";
 import {
   IndexFilters,
@@ -12,7 +12,8 @@ import {
   IndexTable,
   Text,
   Badge,
-  Thumbnail
+  Thumbnail,
+  Select
 } from "@shopify/polaris";
 import { ImageIcon } from "@shopify/polaris-icons";
 import type { IndexFiltersProps, TabProps } from "@shopify/polaris";
@@ -51,6 +52,10 @@ interface ReviewsTableProps {
   onToggleReview: (id: string) => void;
   onOpenReviewDetail: (review: Review) => void;
   onGoToPage: (page: number) => void;
+  allProducts?: { id: string; title: string }[];
+  ratingFilter?: string[];
+  onFilterProductChange?: (value: string) => void;
+  onFilterRatingChange?: (value: string[]) => void;
 }
 
 export default function ReviewsTable({
@@ -69,16 +74,21 @@ export default function ReviewsTable({
   onToggleReview,
   onOpenReviewDetail,
   onGoToPage,
+  allProducts = [],
+  ratingFilter = [],
+  onFilterProductChange,
+  onFilterRatingChange,
 }: ReviewsTableProps) {
   const { mode, setMode } = useSetIndexFiltersMode();
   const fetcher = useFetcher();
+  const [searchParams] = useSearchParams();
+  const filterProduct = searchParams.get('productId') || '';
 
   // Tab setup matching application routing state
   const tabs: TabProps[] = [
     { id: "all", content: `All` },
     { id: "pending", content: `Pending` },
     { id: "published", content: `Published` },
-    { id: "rejected", content: `Rejected` },
   ];
   const selected = Math.max(0, tabs.findIndex((tab) => tab.id === currentFilter));
 
@@ -95,99 +105,75 @@ export default function ReviewsTable({
   ];
   const [sortSelected, setSortSelected] = useState(['date desc']);
 
-  // Mock Filters (from snippet, adapted gracefully)
-  const [accountStatus, setAccountStatus] = useState<string[] | undefined>(undefined);
-  const [moneySpent, setMoneySpent] = useState<[number, number] | undefined>(undefined);
-  const [taggedWith, setTaggedWith] = useState('');
+  // View Filters
+  const handleFilterProductRemove = useCallback(() => {
+    if (onFilterProductChange) onFilterProductChange('');
+  }, [onFilterProductChange]);
 
-  const handleAccountStatusChange = useCallback((value: string[]) => setAccountStatus(value), []);
-  const handleMoneySpentChange = useCallback((value: [number, number]) => setMoneySpent(value), []);
-  const handleTaggedWithChange = useCallback((value: string) => setTaggedWith(value), []);
-
-  const handleAccountStatusRemove = useCallback(() => setAccountStatus(undefined), []);
-  const handleMoneySpentRemove = useCallback(() => setMoneySpent(undefined), []);
-  const handleTaggedWithRemove = useCallback(() => setTaggedWith(''), []);
+  const handleFilterRatingRemove = useCallback(() => {
+    if (onFilterRatingChange) onFilterRatingChange([]);
+  }, [onFilterRatingChange]);
 
   const handleFiltersClearAll = useCallback(() => {
-    handleAccountStatusRemove();
-    handleMoneySpentRemove();
-    handleTaggedWithRemove();
-  }, [handleAccountStatusRemove, handleMoneySpentRemove, handleTaggedWithRemove]);
+    handleFilterProductRemove();
+    handleFilterRatingRemove();
+  }, [handleFilterProductRemove, handleFilterRatingRemove]);
 
   const filters = [
     {
-      key: 'accountStatus',
-      label: 'Account status',
+      key: 'product',
+      label: 'Product',
+      filter: (
+        <Select
+          label="Product"
+          labelHidden
+          options={[
+            { label: 'All Products', value: '' },
+            ...allProducts.map(p => ({ label: p.title, value: p.id }))
+          ]}
+          value={filterProduct}
+          onChange={(value) => onFilterProductChange && onFilterProductChange(value)}
+        />
+      ),
+      shortcut: true,
+    },
+    {
+      key: 'rating',
+      label: 'Rating',
       filter: (
         <ChoiceList
-          title="Account status"
+          title="Rating"
           titleHidden
           choices={[
-            { label: 'Enabled', value: 'enabled' },
-            { label: 'Not invited', value: 'not invited' },
-            { label: 'Invited', value: 'invited' },
-            { label: 'Declined', value: 'declined' },
+            { label: '5 Stars', value: '5' },
+            { label: '4 Stars', value: '4' },
+            { label: '3 Stars', value: '3' },
+            { label: '2 Stars', value: '2' },
+            { label: '1 Star', value: '1' },
           ]}
-          selected={accountStatus || []}
-          onChange={handleAccountStatusChange}
+          selected={ratingFilter}
+          onChange={(value) => onFilterRatingChange && onFilterRatingChange(value)}
           allowMultiple
         />
       ),
       shortcut: true,
     },
-    {
-      key: 'taggedWith',
-      label: 'Tagged with',
-      filter: (
-        <TextField
-          label="Tagged with"
-          value={taggedWith}
-          onChange={handleTaggedWithChange}
-          autoComplete="off"
-          labelHidden
-        />
-      ),
-      shortcut: true,
-    },
-    {
-      key: 'moneySpent',
-      label: 'Money spent',
-      filter: (
-        <RangeSlider
-          label="Money spent is between"
-          labelHidden
-          value={moneySpent || [0, 500]}
-          prefix="$"
-          output
-          min={0}
-          max={2000}
-          step={1}
-          onChange={handleMoneySpentChange}
-        />
-      ),
-    },
   ];
 
   const appliedFilters: IndexFiltersProps['appliedFilters'] = [];
-  if (accountStatus && !isEmpty(accountStatus)) {
+  if (!isEmpty(filterProduct)) {
+    const matchedProduct = allProducts.find(p => p.id === filterProduct);
     appliedFilters.push({
-      key: 'accountStatus',
-      label: `Account status: ${accountStatus.join(', ')}`,
-      onRemove: handleAccountStatusRemove,
+      key: 'product',
+      label: `Product: ${matchedProduct ? matchedProduct.title : filterProduct}`,
+      onRemove: handleFilterProductRemove,
     });
   }
-  if (moneySpent) {
+  if (!isEmpty(ratingFilter)) {
     appliedFilters.push({
-      key: 'moneySpent',
-      label: `Money spent is between $${moneySpent[0]} and $${moneySpent[1]}`,
-      onRemove: handleMoneySpentRemove,
-    });
-  }
-  if (!isEmpty(taggedWith)) {
-    appliedFilters.push({
-      key: 'taggedWith',
-      label: `Tagged with ${taggedWith}`,
-      onRemove: handleTaggedWithRemove,
+      key: 'rating',
+      label: `Rating: ${ratingFilter.join(', ')} Stars`,
+      onRemove: handleFilterRatingRemove,
     });
   }
 
