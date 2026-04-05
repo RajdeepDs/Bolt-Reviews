@@ -43,9 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         );
       }
     })
-    .catch((e: any) =>
-      console.error("Error setting app_url metafield:", e),
-    );
+    .catch((e: any) => console.error("Error setting app_url metafield:", e));
 
   // ── Date ranges (from URL params or default last 30d) ──────
   const url = new URL(request.url);
@@ -56,7 +54,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const periodEnd = toParam ? new Date(toParam + "T23:59:59") : now;
   const periodStart = fromParam
     ? new Date(fromParam + "T00:00:00")
-    : new Date(new Date(now).setDate(now.getDate() - 30));
+    : new Date(new Date(now).setDate(now.getDate() - 180));
 
   // Previous period = same duration right before the selected period
   const durationMs = periodEnd.getTime() - periodStart.getTime();
@@ -72,7 +70,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     pendingCurrent,
   ] = await Promise.all([
     prisma.review.findMany({
-      where: { shopId, createdAt: { gte: periodStart } },
+      where: { shopId, createdAt: { gte: periodStart, lte: periodEnd } },
       select: { createdAt: true },
       orderBy: { createdAt: "asc" },
     }),
@@ -86,7 +84,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
     prisma.review.groupBy({
       by: ["status"],
-      where: { shopId },
+      where: { shopId, createdAt: { gte: periodStart, lte: periodEnd } },
       _count: { status: true },
     }),
     prisma.review.count({
@@ -154,8 +152,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       pending: pendingCurrent,
     },
     statusDistribution: statuses,
-    totalReviews:
-      statuses.published + statuses.pending + statuses.rejected,
+    totalReviews: statuses.published + statuses.pending + statuses.rejected,
     dailyReviews: Array.from(dailyMap.entries()).map(([date, count]) => ({
       date,
       count,

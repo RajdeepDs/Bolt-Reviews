@@ -114,10 +114,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const get = (
-      row: string[],
-      appField: string,
-    ): string | undefined => {
+    const get = (row: string[], appField: string): string | undefined => {
       const idx = colIndex[appField];
       if (idx === undefined || idx === -1) return undefined;
       return row[idx]?.trim() || undefined;
@@ -139,7 +136,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const rating = parseInt(ratingStr);
         if (isNaN(rating) || rating < 1 || rating > 5) {
           skippedCount++;
-          errors.push(`Row ${i + 2}: Invalid rating "${ratingStr}" (must be 1-5)`);
+          errors.push(
+            `Row ${i + 2}: Invalid rating "${ratingStr}" (must be 1-5)`,
+          );
           continue;
         }
 
@@ -165,13 +164,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const title = get(values, "title") || "(No title)";
         const content = get(values, "content") || "";
 
-        // Date
-        let createdAtDate = new Date();
-        const createdAtStr = get(values, "created_at");
-        if (createdAtStr) {
-          const parsed = new Date(createdAtStr);
-          if (!isNaN(parsed.getTime())) createdAtDate = parsed;
-        }
+        // Date — always use today's date for imported reviews
+        const createdAtDate = new Date();
 
         // Images — support comma-separated URLs or JSON array format
         const rawImages = get(values, "images") || "";
@@ -185,12 +179,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             } catch {
               // Fallback to comma-separated
               imageUrls.push(
-                ...rawImages.split(",").map((u) => u.trim().replace(/^"|"$/g, "")).filter(Boolean),
+                ...rawImages
+                  .split(",")
+                  .map((u) => u.trim().replace(/^"|"$/g, ""))
+                  .filter(Boolean),
               );
             }
           } else {
             imageUrls.push(
-              ...rawImages.split(",").map((u) => u.trim().replace(/^"|"$/g, "")).filter(Boolean),
+              ...rawImages
+                .split(",")
+                .map((u) => u.trim().replace(/^"|"$/g, ""))
+                .filter(Boolean),
             );
           }
         }
@@ -213,7 +213,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             skippedCount++;
             errors.push(
               `Row ${i + 2}: Product with handle "${productHandle}" not found. ` +
-              `Filter by the target product before importing to auto-assign unmatched rows.`,
+                `Filter by the target product before importing to auto-assign unmatched rows.`,
             );
             continue;
           }
