@@ -8,6 +8,7 @@ import AnalyticsFilterBar from "../components/analytics-filter-bar";
 import AnalyticsKpiCards from "../components/analytics-kpi-cards";
 import AnalyticsDonutChart from "../components/analytics-donut-chart";
 import AnalyticsLineChart from "../components/analytics-line-chart";
+import DevelopmentStoreBanner from "../components/development-store-banner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -144,6 +145,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const publishRate =
     currentTotal > 0 ? Math.round((publishedCurrent / currentTotal) * 100) : 0;
 
+  // Check subscription status
+  const settings = await prisma.settings.findUnique({
+    where: { shopId },
+  });
+  const hasActiveSubscription =
+    (settings as any)?.subscriptionStatus === "active";
+
   return {
     kpi: {
       reviewsReceived: currentTotal,
@@ -168,6 +176,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       start: prevStart.toISOString().split("T")[0],
       end: prevEnd.toISOString().split("T")[0],
     },
+    hasActiveSubscription,
   };
 };
 
@@ -184,35 +193,39 @@ export default function AnalyticsIndex() {
     dailyReviewsPrev,
     dateRange,
     prevDateRange,
+    hasActiveSubscription,
   } = useLoaderData<typeof loader>();
 
   return (
-    <s-page heading="Analytics" inlineSize="base">
-      <s-stack direction="block" gap="base">
-        {/* Filter bar */}
-        <AnalyticsFilterBar />
+    <>
+      <DevelopmentStoreBanner hasActiveSubscription={hasActiveSubscription} />
+      <s-page heading="Analytics" inlineSize="base">
+        <s-stack direction="block" gap="base">
+          {/* Filter bar */}
+          <AnalyticsFilterBar />
 
-        {/* KPI cards */}
-        <AnalyticsKpiCards kpi={kpi} />
+          {/* KPI cards */}
+          <AnalyticsKpiCards kpi={kpi} />
 
-        {/* Charts row */}
-        <s-grid gap="base" gridTemplateColumns="1fr 2fr">
-          <AnalyticsDonutChart
-            published={statusDistribution.published}
-            pending={statusDistribution.pending}
-            rejected={statusDistribution.rejected}
-            total={totalReviews}
-          />
+          {/* Charts row */}
+          <s-grid gap="base" gridTemplateColumns="1fr 2fr">
+            <AnalyticsDonutChart
+              published={statusDistribution.published}
+              pending={statusDistribution.pending}
+              rejected={statusDistribution.rejected}
+              total={totalReviews}
+            />
 
-          <AnalyticsLineChart
-            data={dailyReviews}
-            prevData={dailyReviewsPrev}
-            dateRange={dateRange}
-            prevDateRange={prevDateRange}
-          />
-        </s-grid>
-      </s-stack>
-    </s-page>
+            <AnalyticsLineChart
+              data={dailyReviews}
+              prevData={dailyReviewsPrev}
+              dateRange={dateRange}
+              prevDateRange={prevDateRange}
+            />
+          </s-grid>
+        </s-stack>
+      </s-page>
+    </>
   );
 }
 

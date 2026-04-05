@@ -10,6 +10,7 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import ProductsTable from "../components/products-table";
+import DevelopmentStoreBanner from "../components/development-store-banner";
 
 const PRODUCTS_PER_PAGE = 25;
 
@@ -58,16 +59,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }),
   );
 
+  // Check subscription status
+  const settings = await prisma.settings.findUnique({
+    where: { shopId: session.shop },
+  });
+  const hasActiveSubscription =
+    (settings as any)?.subscriptionStatus === "active";
+
   return {
     products: productsWithPending,
     totalCount,
     page,
     totalPages: Math.ceil(totalCount / PRODUCTS_PER_PAGE),
+    hasActiveSubscription,
   };
 };
 
 export default function ProductsIndex() {
-  const { products, totalCount, page, totalPages } =
+  const { products, totalCount, page, totalPages, hasActiveSubscription } =
     useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const navigation = useNavigation();
@@ -101,7 +110,6 @@ export default function ProductsIndex() {
     }
   }, [isSyncing, fetcher.state, fetcher.data]);
 
-
   // Pagination & Search
   const goToPage = (newPage: number) => {
     const params = new URLSearchParams(searchParams);
@@ -127,23 +135,29 @@ export default function ProductsIndex() {
   };
 
   return (
-    <s-page heading="Products" inlineSize="base">
-      <s-button slot="primary-action" onClick={handleSync} disabled={isSyncing}>
-        {isSyncing ? "Syncing..." : "Sync Products"}
-      </s-button>
+    <>
+      <DevelopmentStoreBanner hasActiveSubscription={hasActiveSubscription} />
+      <s-page heading="Products" inlineSize="base">
+        <s-button
+          slot="primary-action"
+          onClick={handleSync}
+          disabled={isSyncing}
+        >
+          {isSyncing ? "Syncing..." : "Sync Products"}
+        </s-button>
 
-
-      <ProductsTable
-        products={products}
-        totalCount={totalCount}
-        page={page}
-        totalPages={totalPages}
-        searchQuery={searchQuery}
-        isLoading={isLoading}
-        onSearchChange={handleSearchChange}
-        onGoToPage={goToPage}
-      />
-    </s-page>
+        <ProductsTable
+          products={products}
+          totalCount={totalCount}
+          page={page}
+          totalPages={totalPages}
+          searchQuery={searchQuery}
+          isLoading={isLoading}
+          onSearchChange={handleSearchChange}
+          onGoToPage={goToPage}
+        />
+      </s-page>
+    </>
   );
 }
 

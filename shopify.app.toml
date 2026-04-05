@@ -31,6 +31,10 @@ api_version = "2026-04"
   topics = [ "products/delete" ]
   uri = "/webhooks/products/delete"
 
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app/subscription_update"
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products,read_products,read_orders"

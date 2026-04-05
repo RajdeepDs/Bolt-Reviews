@@ -8,6 +8,7 @@ import { useLoaderData, useSubmit, useNavigation } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
+import DevelopmentStoreBanner from "../components/development-store-banner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -32,7 +33,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  return { settings };
+  return {
+    settings,
+    hasActiveSubscription: (settings as any)?.subscriptionStatus === "active",
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -81,7 +85,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function SettingsIndex() {
-  const { settings } = useLoaderData<typeof loader>();
+  const { settings, hasActiveSubscription } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -129,15 +133,9 @@ export default function SettingsIndex() {
       "requireVerifiedPurchase",
       String(formState.requireVerifiedPurchase),
     );
-    formData.append(
-      "minRatingToPublish",
-      String(formState.minRatingToPublish),
-    );
+    formData.append("minRatingToPublish", String(formState.minRatingToPublish));
     formData.append("enableReviewImages", String(formState.enableReviewImages));
-    formData.append(
-      "emailNotifications",
-      String(formState.emailNotifications),
-    );
+    formData.append("emailNotifications", String(formState.emailNotifications));
     formData.append("notificationEmail", formState.notificationEmail);
 
     submit(formData, { method: "post" });
@@ -166,176 +164,182 @@ export default function SettingsIndex() {
   };
 
   return (
-    <s-page heading="Settings" inlineSize="base">
-      {isDirty && (
-        <>
-          <s-button
-            slot="primary-action"
-            variant="primary"
-            onClick={handleSave}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Saving..." : "Save"}
-          </s-button>
-          <s-button
-            slot="secondary-actions"
-            onClick={handleDiscard}
-            disabled={isSubmitting}
-          >
-            Discard
-          </s-button>
-        </>
-      )}
+    <>
+      <DevelopmentStoreBanner hasActiveSubscription={hasActiveSubscription} />
+      <s-page heading="Settings" inlineSize="base">
+        {isDirty && (
+          <>
+            <s-button
+              slot="primary-action"
+              variant="primary"
+              onClick={handleSave}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Saving..." : "Save"}
+            </s-button>
+            <s-button
+              slot="secondary-actions"
+              onClick={handleDiscard}
+              disabled={isSubmitting}
+            >
+              Discard
+            </s-button>
+          </>
+        )}
 
-      {/* Review Moderation */}
-      <s-section heading="Review Moderation">
-        <s-box padding="base">
-          <s-stack gap="large">
-            <s-stack gap="small">
-              <s-checkbox
-                label="Auto-publish reviews"
-                checked={formState.autoPublish}
-                onInput={(e: any) =>
-                  updateField("autoPublish", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                Automatically publish new reviews without manual moderation.
-                When enabled, reviews meeting the minimum rating will be
-                published immediately.
-              </s-text>
-            </s-stack>
-
-            <s-stack gap="small">
-              <s-checkbox
-                label="Require moderation"
-                checked={formState.requireModeration}
-                onInput={(e: any) =>
-                  updateField("requireModeration", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                All reviews must be manually approved before appearing on your
-                storefront.
-              </s-text>
-            </s-stack>
-
-            {formState.autoPublish && (
+        {/* Review Moderation */}
+        <s-section heading="Review Moderation">
+          <s-box padding="base">
+            <s-stack gap="large">
               <s-stack gap="small">
-                <s-text>
-                  <strong>Minimum rating to auto-publish</strong>
-                </s-text>
-                <select
-                  value={String(formState.minRatingToPublish)}
-                  onChange={(e) =>
-                    updateField("minRatingToPublish", parseInt(e.target.value))
+                <s-checkbox
+                  label="Auto-publish reviews"
+                  checked={formState.autoPublish}
+                  onInput={(e: any) =>
+                    updateField("autoPublish", e.target.checked)
                   }
-                  style={{
-                    width: "100%",
-                    padding: "8px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid var(--s-color-border, #ccc)",
-                    fontSize: "14px",
-                    fontFamily: "inherit",
-                    background: "var(--s-color-bg-surface, #fff)",
-                    color: "inherit",
-                    cursor: "pointer",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <option value="1">1 star and above (all reviews)</option>
-                  <option value="2">2 stars and above</option>
-                  <option value="3">3 stars and above</option>
-                  <option value="4">4 stars and above</option>
-                  <option value="5">5 stars only</option>
-                </select>
+                />
                 <s-text color="subdued">
-                  Reviews below this rating will be held for moderation.
+                  Automatically publish new reviews without manual moderation.
+                  When enabled, reviews meeting the minimum rating will be
+                  published immediately.
                 </s-text>
               </s-stack>
-            )}
-          </s-stack>
-        </s-box>
-      </s-section>
 
-      {/* Review Submission */}
-      <s-section heading="Review Submission">
-        <s-box padding="base">
-          <s-stack gap="large">
-            <s-stack gap="small">
-              <s-checkbox
-                label="Allow guest reviews"
-                checked={formState.allowGuestReviews}
-                onInput={(e: any) =>
-                  updateField("allowGuestReviews", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                Allow customers to leave reviews without being logged in.
-              </s-text>
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Require moderation"
+                  checked={formState.requireModeration}
+                  onInput={(e: any) =>
+                    updateField("requireModeration", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  All reviews must be manually approved before appearing on your
+                  storefront.
+                </s-text>
+              </s-stack>
+
+              {formState.autoPublish && (
+                <s-stack gap="small">
+                  <s-text>
+                    <strong>Minimum rating to auto-publish</strong>
+                  </s-text>
+                  <select
+                    value={String(formState.minRatingToPublish)}
+                    onChange={(e) =>
+                      updateField(
+                        "minRatingToPublish",
+                        parseInt(e.target.value),
+                      )
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--s-color-border, #ccc)",
+                      fontSize: "14px",
+                      fontFamily: "inherit",
+                      background: "var(--s-color-bg-surface, #fff)",
+                      color: "inherit",
+                      cursor: "pointer",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="1">1 star and above (all reviews)</option>
+                    <option value="2">2 stars and above</option>
+                    <option value="3">3 stars and above</option>
+                    <option value="4">4 stars and above</option>
+                    <option value="5">5 stars only</option>
+                  </select>
+                  <s-text color="subdued">
+                    Reviews below this rating will be held for moderation.
+                  </s-text>
+                </s-stack>
+              )}
             </s-stack>
+          </s-box>
+        </s-section>
 
-            <s-stack gap="small">
-              <s-checkbox
-                label="Require verified purchase"
-                checked={formState.requireVerifiedPurchase}
-                onInput={(e: any) =>
-                  updateField("requireVerifiedPurchase", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                Only customers who have purchased the product can leave a
-                review.
-              </s-text>
+        {/* Review Submission */}
+        <s-section heading="Review Submission">
+          <s-box padding="base">
+            <s-stack gap="large">
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Allow guest reviews"
+                  checked={formState.allowGuestReviews}
+                  onInput={(e: any) =>
+                    updateField("allowGuestReviews", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  Allow customers to leave reviews without being logged in.
+                </s-text>
+              </s-stack>
+
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Require verified purchase"
+                  checked={formState.requireVerifiedPurchase}
+                  onInput={(e: any) =>
+                    updateField("requireVerifiedPurchase", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  Only customers who have purchased the product can leave a
+                  review.
+                </s-text>
+              </s-stack>
+
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Enable review photos"
+                  checked={formState.enableReviewImages}
+                  onInput={(e: any) =>
+                    updateField("enableReviewImages", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  Allow customers to upload photos with their reviews.
+                </s-text>
+              </s-stack>
             </s-stack>
+          </s-box>
+        </s-section>
 
-            <s-stack gap="small">
-              <s-checkbox
-                label="Enable review photos"
-                checked={formState.enableReviewImages}
-                onInput={(e: any) =>
-                  updateField("enableReviewImages", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                Allow customers to upload photos with their reviews.
-              </s-text>
+        {/* Notifications */}
+        <s-section heading="Notifications">
+          <s-box padding="base">
+            <s-stack gap="large">
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Email notifications for new reviews"
+                  checked={formState.emailNotifications}
+                  onInput={(e: any) =>
+                    updateField("emailNotifications", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  Receive an email notification when a new review is submitted.
+                </s-text>
+              </s-stack>
+
+              {formState.emailNotifications && (
+                <s-text-field
+                  label="Notification email"
+                  value={formState.notificationEmail}
+                  placeholder="your@email.com"
+                  onInput={(e: any) =>
+                    updateField("notificationEmail", e.target.value || "")
+                  }
+                />
+              )}
             </s-stack>
-          </s-stack>
-        </s-box>
-      </s-section>
-
-      {/* Notifications */}
-      <s-section heading="Notifications">
-        <s-box padding="base">
-          <s-stack gap="large">
-            <s-stack gap="small">
-              <s-checkbox
-                label="Email notifications for new reviews"
-                checked={formState.emailNotifications}
-                onInput={(e: any) =>
-                  updateField("emailNotifications", e.target.checked)
-                }
-              />
-              <s-text color="subdued">
-                Receive an email notification when a new review is submitted.
-              </s-text>
-            </s-stack>
-
-            {formState.emailNotifications && (
-              <s-text-field
-                label="Notification email"
-                value={formState.notificationEmail}
-                placeholder="your@email.com"
-                onInput={(e: any) =>
-                  updateField("notificationEmail", e.target.value || "")
-                }
-              />
-            )}
-          </s-stack>
-        </s-box>
-      </s-section>
-    </s-page>
+          </s-box>
+        </s-section>
+      </s-page>
+    </>
   );
 }
 

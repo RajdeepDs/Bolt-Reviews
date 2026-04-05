@@ -3,9 +3,50 @@ import {
   ApiVersion,
   AppDistribution,
   shopifyApp,
+  BillingInterval,
 } from "@shopify/shopify-app-react-router/server";
+import type { BillingConfigSubscriptionLineItemPlan } from "@shopify/shopify-api";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+
+// Plan names - exported for use in billing routes
+export const PLAN_BASIC = "Basic";
+export const PLAN_PRO = "Pro";
+export const PLAN_ELITE = "Elite";
+
+// Billing configuration with lineItems format
+const BILLING_CONFIG: Record<string, BillingConfigSubscriptionLineItemPlan> = {
+  [PLAN_BASIC]: {
+    lineItems: [
+      {
+        amount: 4.99,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+    trialDays: 0,
+  },
+  [PLAN_PRO]: {
+    lineItems: [
+      {
+        amount: 7.99,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+    trialDays: 0,
+  },
+  [PLAN_ELITE]: {
+    lineItems: [
+      {
+        amount: 12.99,
+        currencyCode: "USD",
+        interval: BillingInterval.Every30Days,
+      },
+    ],
+    trialDays: 0,
+  },
+};
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -16,6 +57,7 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  billing: BILLING_CONFIG,
   future: {
     expiringOfflineAccessTokens: true,
   },

@@ -22,6 +22,7 @@ import ReviewsEmptyState from "../components/reviews-empty-state";
 import ReviewsTable from "../components/reviews-table";
 import ReviewImportModal from "../components/reviews-import-modal";
 import ReviewDetailModal from "../components/reviews-detail-modal";
+import DevelopmentStoreBanner from "../components/development-store-banner";
 import type { Review } from "../utils/reviews-types";
 
 const REVIEWS_PER_PAGE = 25;
@@ -168,6 +169,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   );
   counts.all = counts.pending + counts.published + counts.rejected;
 
+  // Check subscription status
+  const settings = await prisma.settings.findUnique({
+    where: { shopId: session.shop },
+  });
+  const hasActiveSubscription =
+    (settings as any)?.subscriptionStatus === "active";
+
   return {
     reviews,
     counts,
@@ -177,6 +185,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     filterProductName,
     allProducts,
     ratingFilter,
+    hasActiveSubscription,
   };
 };
 
@@ -292,6 +301,7 @@ export default function ReviewsIndex() {
     filterProductName,
     allProducts,
     ratingFilter,
+    hasActiveSubscription,
   } = useLoaderData<typeof loader>();
   const submit = useSubmit();
   const navigation = useNavigation();
@@ -481,113 +491,116 @@ export default function ReviewsIndex() {
   };
 
   return (
-    <s-page heading="My Reviews" inlineSize="base">
-      {selectedReviews.length === 0 && (
-        <s-button slot="primary-action" commandFor="import-modal">
-          Import reviews
-        </s-button>
-      )}
-
-      <ReviewImportModal />
-
-      {selectedReviews.length === 0 && (
-        <s-button slot="secondary-actions" onClick={handleExport}>
-          Export reviews
-        </s-button>
-      )}
-
-      {/* Bulk actions */}
-      {selectedReviews.length > 0 && (
-        <>
-          {publishableCount > 0 && (
-            <s-button
-              slot="primary-action"
-              onClick={() => handleBulkAction("publish")}
-              disabled={isSubmitting}
-            >
-              Publish
-            </s-button>
-          )}
-
-          {unpublishableCount > 0 && (
-            <s-button
-              slot={
-                publishableCount > 0 ? "secondary-actions" : "primary-action"
-              }
-              onClick={() => handleBulkAction("unpublish")}
-              disabled={isSubmitting}
-            >
-              Unpublish ({unpublishableCount})
-            </s-button>
-          )}
-
-          <s-button
-            slot="secondary-actions"
-            tone="critical"
-            onClick={() => handleBulkAction("delete")}
-            disabled={isSubmitting}
-          >
-            Delete ({selectedReviews.length})
+    <>
+      <DevelopmentStoreBanner hasActiveSubscription={hasActiveSubscription} />
+      <s-page heading="My Reviews" inlineSize="base">
+        {selectedReviews.length === 0 && (
+          <s-button slot="primary-action" commandFor="import-modal">
+            Import reviews
           </s-button>
-        </>
-      )}
+        )}
 
-      {/* Main content: empty state or table */}
-      {counts.all === 0 ? (
-        <ReviewsEmptyState />
-      ) : (
-        <ReviewsTable
-          reviews={reviews as unknown as Review[]}
-          counts={counts as any}
-          totalFiltered={totalFiltered}
-          page={page}
-          totalPages={totalPages}
-          currentFilter={currentFilter}
-          searchQuery={searchQuery}
-          selectedReviews={selectedReviews}
-          isLoading={isLoading}
-          onFilterChange={setFilter}
-          onSearchChange={handleSearchChange}
-          onToggleSelectAll={toggleSelectAll}
-          onToggleReview={toggleReview}
-          onOpenReviewDetail={openReviewDetail}
-          onGoToPage={goToPage}
-          allProducts={allProducts}
-          ratingFilter={ratingFilter}
-          onFilterProductChange={handleFilterProductChange}
-          onFilterRatingChange={handleFilterRatingChange}
+        <ReviewImportModal />
+
+        {selectedReviews.length === 0 && (
+          <s-button slot="secondary-actions" onClick={handleExport}>
+            Export reviews
+          </s-button>
+        )}
+
+        {/* Bulk actions */}
+        {selectedReviews.length > 0 && (
+          <>
+            {publishableCount > 0 && (
+              <s-button
+                slot="primary-action"
+                onClick={() => handleBulkAction("publish")}
+                disabled={isSubmitting}
+              >
+                Publish
+              </s-button>
+            )}
+
+            {unpublishableCount > 0 && (
+              <s-button
+                slot={
+                  publishableCount > 0 ? "secondary-actions" : "primary-action"
+                }
+                onClick={() => handleBulkAction("unpublish")}
+                disabled={isSubmitting}
+              >
+                Unpublish ({unpublishableCount})
+              </s-button>
+            )}
+
+            <s-button
+              slot="secondary-actions"
+              tone="critical"
+              onClick={() => handleBulkAction("delete")}
+              disabled={isSubmitting}
+            >
+              Delete ({selectedReviews.length})
+            </s-button>
+          </>
+        )}
+
+        {/* Main content: empty state or table */}
+        {counts.all === 0 ? (
+          <ReviewsEmptyState />
+        ) : (
+          <ReviewsTable
+            reviews={reviews as unknown as Review[]}
+            counts={counts as any}
+            totalFiltered={totalFiltered}
+            page={page}
+            totalPages={totalPages}
+            currentFilter={currentFilter}
+            searchQuery={searchQuery}
+            selectedReviews={selectedReviews}
+            isLoading={isLoading}
+            onFilterChange={setFilter}
+            onSearchChange={handleSearchChange}
+            onToggleSelectAll={toggleSelectAll}
+            onToggleReview={toggleReview}
+            onOpenReviewDetail={openReviewDetail}
+            onGoToPage={goToPage}
+            allProducts={allProducts}
+            ratingFilter={ratingFilter}
+            onFilterProductChange={handleFilterProductChange}
+            onFilterRatingChange={handleFilterRatingChange}
+          />
+        )}
+
+        {/* Hidden trigger buttons */}
+        <div style={{ display: "none" }}>
+          <s-button
+            id="review-detail-modal-trigger"
+            commandFor="review-detail-modal"
+          >
+            Open
+          </s-button>
+          <s-button
+            id="review-detail-modal-close"
+            commandFor="review-detail-modal"
+            command="--hide"
+          >
+            Close
+          </s-button>
+          <s-button
+            id="import-modal-close"
+            commandFor="import-modal"
+            command="--hide"
+          >
+            Close
+          </s-button>
+        </div>
+
+        <ReviewDetailModal
+          selectedReview={selectedReview as Review | null}
+          onClose={closeReviewDetail}
         />
-      )}
-
-      {/* Hidden trigger buttons */}
-      <div style={{ display: "none" }}>
-        <s-button
-          id="review-detail-modal-trigger"
-          commandFor="review-detail-modal"
-        >
-          Open
-        </s-button>
-        <s-button
-          id="review-detail-modal-close"
-          commandFor="review-detail-modal"
-          command="--hide"
-        >
-          Close
-        </s-button>
-        <s-button
-          id="import-modal-close"
-          commandFor="import-modal"
-          command="--hide"
-        >
-          Close
-        </s-button>
-      </div>
-
-      <ReviewDetailModal
-        selectedReview={selectedReview as Review | null}
-        onClose={closeReviewDetail}
-      />
-    </s-page>
+      </s-page>
+    </>
   );
 }
 

@@ -110,6 +110,12 @@ model Settings {
   enableReviewImages      Boolean  @default(true)
   emailNotifications      Boolean  @default(true)
   notificationEmail       String?
+  // Subscription fields
+  activePlan              String?  // "basic", "pro", "elite", or null for no subscription
+  subscriptionStatus      String   @default("none") // "none", "active", "cancelled", "expired"
+  subscriptionId          String?  // Shopify subscription ID
+  subscriptionStartDate   DateTime?
+  subscriptionEndDate     DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
