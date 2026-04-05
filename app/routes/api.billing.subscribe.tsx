@@ -24,8 +24,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Build the return URL for after subscription confirmation
+  // Must redirect back to an embedded app page, not an API route
   const appUrl = process.env.SHOPIFY_APP_URL || "";
-  const returnUrl = `${appUrl}/api/billing/callback?shop=${session.shop}&plan=${planKey}`;
+  const returnUrl = `${appUrl}/plans?shop=${session.shop}&billing_callback=true&plan=${planKey}`;
 
   try {
     // Check if this is a development store
