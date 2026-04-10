@@ -53,11 +53,13 @@ export default function ProductsTable({
       >
         <IndexTable.Cell>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <Thumbnail
-              source={product.imageUrl || ImageIcon}
-              alt={product.title}
-              size="small"
-            />
+            <Link to={`/reviews?productId=${product.id}`} style={{ display: "flex", lineHeight: 0 }}>
+              <Thumbnail
+                source={product.imageUrl || ImageIcon}
+                alt={product.title}
+                size="small"
+              />
+            </Link>
             <Text as="span" variant="bodyMd" fontWeight="semibold">
               {product.title}
             </Text>

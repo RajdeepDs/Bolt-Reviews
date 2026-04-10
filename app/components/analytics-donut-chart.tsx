@@ -19,8 +19,8 @@ export default function AnalyticsDonutChart({
     total === 0
       ? []
       : [
-        { value: published, color: "#29845a" },
-        { value: pending, color: "#b98900" },
+        { value: published, color: "#5c6ac4" },
+        { value: pending, color: "#b8aee8" },
         { value: rejected, color: "#d72c0d" },
       ].filter((s) => s.value > 0);
 

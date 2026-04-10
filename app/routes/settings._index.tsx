@@ -22,7 +22,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     settings = await prisma.settings.create({
       data: {
         shopId: session.shop,
-        autoPublish: false,
+        autoPublish: true,
         requireModeration: true,
         allowGuestReviews: true,
         requireVerifiedPurchase: false,

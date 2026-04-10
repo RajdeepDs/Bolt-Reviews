@@ -121,15 +121,15 @@ export default function PlansIndex() {
     {
       key: "basic",
       name: "Basic",
-      reviews: "Up to 500",
-      reviewLimit: 500,
+      reviews: "Up to 50",
+      reviewLimit: 50,
       price: "$4.99/mo",
     },
     {
       key: "pro",
       name: "Pro",
-      reviews: "Up to 1,500",
-      reviewLimit: 1500,
+      reviews: "Up to 500",
+      reviewLimit: 500,
       price: "$7.99/mo",
     },
     {
