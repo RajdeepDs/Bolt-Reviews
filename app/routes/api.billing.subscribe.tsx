@@ -24,9 +24,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   // Build the return URL for after subscription confirmation
-  // Must redirect back to an embedded app page, not an API route
-  const appUrl = process.env.SHOPIFY_APP_URL || "";
-  const returnUrl = `${appUrl}/plans?shop=${session.shop}&billing_callback=true&plan=${planKey}`;
+  // Must redirect back to the embedded Shopify Admin URL, not the raw app URL, 
+  // otherwise we lose the iframe context and trigger an auth redirect loop
+  const returnUrl = `https://${session.shop}/admin/apps/${process.env.SHOPIFY_API_KEY}/plans?billing_callback=true&plan=${planKey}`;
 
   try {
     // Check if this is a development store
