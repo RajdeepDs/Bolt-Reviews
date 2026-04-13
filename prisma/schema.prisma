@@ -122,3 +122,14 @@ model Settings {
 
   @@index([shopId])
 }
+
+model User {
+  id        String   @id @default(cuid())
+  shopId    String   @unique
+  name      String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([shopId])
+}

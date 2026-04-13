@@ -89,6 +89,39 @@ const shopify = shopifyApp({
           });
           console.log(`✅ Created default settings for ${session.shop}`);
         }
+        
+        // Fetch and store merchant contact info
+        try {
+          console.log(`🔄 Fetching merchant info for ${session.shop}...`);
+          const shopResponse = await admin.graphql(`
+            query {
+              shop {
+                name
+                email
+                contactEmail
+              }
+            }
+          `);
+          const shopData: any = await shopResponse.json();
+          const shopEmail = shopData.data?.shop?.email || shopData.data?.shop?.contactEmail;
+          const shopName = shopData.data?.shop?.name;
+
+          await prisma.user.upsert({
+            where: { shopId: session.shop },
+            update: {
+              name: shopName,
+              email: shopEmail,
+            },
+            create: {
+              shopId: session.shop,
+              name: shopName,
+              email: shopEmail,
+            }
+          });
+          console.log(`✅ Stored user info for ${session.shop}`);
+        } catch (error) {
+          console.error(`❌ Error storing user info:`, error);
+        }
 
         // Sync products from Shopify
         console.log(`🔄 Starting product sync for ${session.shop}...`);
