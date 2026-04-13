@@ -60,20 +60,27 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Handle multiple image uploads (up to 5)
-    let imageUrl: string | null = null;
-    const images: string[] = [];
-    
+    // Handle single image upload via Cloudinary (1 image per review)
+    let imageFile: File | null = null;
     for (const [key, value] of formData.entries()) {
       if (key.startsWith("photo") && value instanceof File && value.size > 0) {
-        if (images.length >= 5) break; // Limit to 5 images
-        
-        const buffer = await value.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        const dataUrl = `data:${value.type};base64,${base64}`;
-        
-        images.push(dataUrl);
-        if (!imageUrl) imageUrl = dataUrl; // Set first image as primary
+        imageFile = value;
+        break; // Only take the first image
+      }
+    }
+
+    let imageUrl: string | null = null;
+    const images: string[] = [];
+
+    if (imageFile) {
+      try {
+        const { uploadSingleImage } = await import("../utils/cloudinary.server");
+        const url = await uploadSingleImage(imageFile);
+        imageUrl = url;
+        images.push(url);
+      } catch (error) {
+        console.error("Failed to upload review image:", error);
+        // Continue creating the review without the image
       }
     }
 

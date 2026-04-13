@@ -25,6 +25,10 @@ export default function ReviewDetailModal({
   const revalidator = useRevalidator();
 
   const [replyText, setReplyText] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [editImages, setEditImages] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [editForm, setEditForm] = useState({
     title: "",
     content: "",
@@ -34,10 +38,18 @@ export default function ReviewDetailModal({
     customerEmail: "",
   });
 
-  // Sync form state when selectedReview changes
   useEffect(() => {
     if (selectedReview) {
       setReplyText(selectedReview.merchantReply || "");
+      setNewImageUrl("");
+      // Normalise: prefer the images[] array, fall back to imageUrl
+      const imgs =
+        selectedReview.images?.length > 0
+          ? selectedReview.images
+          : selectedReview.imageUrl
+            ? [selectedReview.imageUrl]
+            : [];
+      setEditImages(imgs);
       setEditForm({
         title: selectedReview.title,
         content: selectedReview.content,
@@ -49,6 +61,63 @@ export default function ReviewDetailModal({
     }
   }, [selectedReview]);
 
+  const handleAddImage = () => {
+    const trimmed = newImageUrl.trim();
+    if (!trimmed) return;
+    setEditImages((prev) => [...prev, trimmed]);
+    setNewImageUrl("");
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0]; // Only take 1 image
+    setIsUploading(true);
+    const shopify = (window as any).shopify;
+
+    // Client-side validation
+    if (!file.type.startsWith("image/")) {
+      shopify?.toast?.show?.("Only image files are allowed", { isError: true });
+      setIsUploading(false);
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      shopify?.toast?.show?.("Image must be smaller than 5MB", { isError: true });
+      setIsUploading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.url) {
+        setEditImages([data.url]); // Replace — 1 image per review
+      } else {
+        shopify?.toast?.show?.(data.error || "Upload failed", { isError: true });
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      shopify?.toast?.show?.("Failed to upload image", { isError: true });
+    }
+
+    setIsUploading(false);
+    // Reset file input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setEditImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSaveReview = () => {
     if (!selectedReview) return;
     updateFetcher.submit(
@@ -59,6 +128,8 @@ export default function ReviewDetailModal({
         title: editForm.title,
         content: editForm.content,
         status: editForm.status,
+        images: editImages,
+        imageUrl: editImages[0] ?? null,
       }),
       {
         method: "PATCH",
@@ -162,42 +233,81 @@ export default function ReviewDetailModal({
         <s-box padding="base">
           <s-stack gap="large">
             {/* Review images */}
-            {(selectedReview.images?.length > 0 || selectedReview.imageUrl) && (
-              <s-box>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {selectedReview.images?.length > 0
-                    ? selectedReview.images.map((img: string, i: number) => (
-                      <img
+            <s-box>
+              <s-stack gap="small">
+                <s-text><strong>Review Images</strong></s-text>
+                {editImages.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {editImages.map((img, i) => (
+                      <div
                         key={i}
-                        src={img}
-                        alt={`Review image ${i + 1}`}
-                        style={{
-                          width: "120px",
-                          height: "120px",
-                          borderRadius: "8px",
-                          objectFit: "cover",
-                          border: "1px solid var(--s-color-border)",
-                        }}
-                        onClick={() => window.open(img, "_blank")}
-                      />
-                    ))
-                    : selectedReview.imageUrl && (
-                      <img
-                        src={selectedReview.imageUrl}
-                        alt="Review image"
-                        style={{
-                          width: "120px",
-                          height: "120px",
-                          borderRadius: "8px",
-                          objectFit: "cover",
-                          border: "1px solid var(--s-color-border)",
-                        }}
-                        onClick={() => window.open(selectedReview.imageUrl!, "_blank")}
-                      />
-                    )}
+                        style={{ position: "relative", display: "inline-block" }}
+                      >
+                        <img
+                          src={img}
+                          alt={`Review image ${i + 1}`}
+                          style={{
+                            width: "100px",
+                            height: "100px",
+                            borderRadius: "8px",
+                            objectFit: "cover",
+                            border: "1px solid var(--s-color-border)",
+                            cursor: "pointer",
+                            display: "block",
+                          }}
+                          onClick={() => window.open(img, "_blank")}
+                        />
+                        <button
+                          onClick={() => handleRemoveImage(i)}
+                          title="Remove image"
+                          style={{
+                            position: "absolute",
+                            top: "4px",
+                            right: "4px",
+                            background: "rgba(0,0,0,0.6)",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "50%",
+                            width: "22px",
+                            height: "22px",
+                            cursor: "pointer",
+                            fontSize: "14px",
+                            lineHeight: "1",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {editImages.length === 0 && (
+                  <s-text color="subdued">No images attached to this review.</s-text>
+                )}
+
+                {/* Upload image file */}
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    style={{ display: "none" }}
+                    id="review-image-upload"
+                  />
+                  <s-button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? "Uploading…" : "Upload Image"}
+                  </s-button>
                 </div>
-              </s-box>
-            )}
+              </s-stack>
+            </s-box>
 
             {/* Product info */}
             <s-stack direction="inline" gap="small" alignItems="center">

@@ -26,6 +26,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       status,
       isVerified,
       imageUrl,
+      images,
     } = body;
 
     // Verify review exists and belongs to this shop
@@ -69,6 +70,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     if (status !== undefined) updateData.status = status;
     if (isVerified !== undefined) updateData.isVerified = isVerified;
     if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+    if (images !== undefined) updateData.images = images;
 
     // Update the review
     const updatedReview = await prisma.review.update({

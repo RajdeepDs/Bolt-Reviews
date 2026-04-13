@@ -23,6 +23,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       data: {
         shopId: session.shop,
         autoPublish: true,
+        autoImportPublish: true,
         requireModeration: true,
         allowGuestReviews: true,
         requireVerifiedPurchase: false,
@@ -48,6 +49,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { shopId: session.shop },
       update: {
         autoPublish: formData.get("autoPublish") === "true",
+        autoImportPublish: formData.get("autoImportPublish") === "true",
         requireModeration: formData.get("requireModeration") === "true",
         allowGuestReviews: formData.get("allowGuestReviews") === "true",
         requireVerifiedPurchase:
@@ -63,6 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       create: {
         shopId: session.shop,
         autoPublish: formData.get("autoPublish") === "true",
+        autoImportPublish: formData.get("autoImportPublish") === "true",
         requireModeration: formData.get("requireModeration") === "true",
         allowGuestReviews: formData.get("allowGuestReviews") === "true",
         requireVerifiedPurchase:
@@ -92,6 +95,7 @@ export default function SettingsIndex() {
 
   const [formState, setFormState] = useState({
     autoPublish: settings.autoPublish,
+    autoImportPublish: (settings as any).autoImportPublish ?? true,
     requireModeration: settings.requireModeration,
     allowGuestReviews: settings.allowGuestReviews,
     requireVerifiedPurchase: settings.requireVerifiedPurchase,
@@ -107,6 +111,7 @@ export default function SettingsIndex() {
   useEffect(() => {
     const changed =
       formState.autoPublish !== settings.autoPublish ||
+      formState.autoImportPublish !== ((settings as any).autoImportPublish ?? true) ||
       formState.requireModeration !== settings.requireModeration ||
       formState.allowGuestReviews !== settings.allowGuestReviews ||
       formState.requireVerifiedPurchase !== settings.requireVerifiedPurchase ||
@@ -127,6 +132,7 @@ export default function SettingsIndex() {
   const handleSave = () => {
     const formData = new FormData();
     formData.append("autoPublish", String(formState.autoPublish));
+    formData.append("autoImportPublish", String(formState.autoImportPublish));
     formData.append("requireModeration", String(formState.requireModeration));
     formData.append("allowGuestReviews", String(formState.allowGuestReviews));
     formData.append(
@@ -149,6 +155,7 @@ export default function SettingsIndex() {
   const handleDiscard = () => {
     setFormState({
       autoPublish: settings.autoPublish,
+      autoImportPublish: (settings as any).autoImportPublish ?? true,
       requireModeration: settings.requireModeration,
       allowGuestReviews: settings.allowGuestReviews,
       requireVerifiedPurchase: settings.requireVerifiedPurchase,
@@ -257,6 +264,27 @@ export default function SettingsIndex() {
                   </s-text>
                 </s-stack>
               )}
+            </s-stack>
+          </s-box>
+        </s-section>
+
+        {/* Review Import */}
+        <s-section heading="Review Import">
+          <s-box padding="base">
+            <s-stack gap="large">
+              <s-stack gap="small">
+                <s-checkbox
+                  label="Auto-publish imported reviews"
+                  checked={formState.autoImportPublish}
+                  onInput={(e: any) =>
+                    updateField("autoImportPublish", e.target.checked)
+                  }
+                />
+                <s-text color="subdued">
+                  When enabled, reviews imported via CSV will be automatically
+                  published instead of held as pending for moderation.
+                </s-text>
+              </s-stack>
             </s-stack>
           </s-box>
         </s-section>

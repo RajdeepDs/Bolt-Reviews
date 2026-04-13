@@ -219,18 +219,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
 
-        // Determine status
+        // Determine status — use autoImportPublish setting (defaults to published)
         const settings = await prisma.settings.findUnique({
           where: { shopId: session.shop },
         });
 
-        let status = "pending";
-        if (
-          settings?.autoPublish &&
-          rating >= (settings.minRatingToPublish || 1)
-        ) {
-          status = "published";
-        }
+        const shouldPublish = (settings as any)?.autoImportPublish ?? true;
+        const status = shouldPublish ? "published" : "pending";
 
         // Create review
         await prisma.review.create({
